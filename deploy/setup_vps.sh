@@ -39,9 +39,11 @@ apt-get install -y \
   curl \
   build-essential \
   libfreetype6 \
-  libpng16-16 \
   certbot \
   python3-certbot-nginx
+
+# Ubuntu 22.04 vs 24.04 compatibility for libpng
+apt-get install -y libpng16-16t64 2>/dev/null || apt-get install -y libpng16-16 2>/dev/null || true
 
 # 3. Create Dedicated System Service User
 echo "[+] Step 2/7: Creating dedicated system user (${SERVICE_USER})..."
@@ -51,21 +53,38 @@ fi
 
 # 4. Clone or Update Application Repository
 echo "[+] Step 3/7: Fetching application code to ${APP_DIR}..."
+git config --global --add safe.directory "${APP_DIR}" || true
+
 if [ ! -d "${APP_DIR}/.git" ]; then
-  rm -rf "${APP_DIR}"
+  mkdir -p "${APP_DIR}"
   git clone "${REPO_URL}" "${APP_DIR}"
 else
-  git -C "${APP_DIR}" pull origin main
+  git -C "${APP_DIR}" fetch origin main
+  git -C "${APP_DIR}" reset --hard origin/main
 fi
+
+# Ensure full ownership of APP_DIR before creating files
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}"
+chmod -R u+rwX,g+rwX "${APP_DIR}"
 
 # 5. Set Up Python Virtual Environment & Install Dependencies
 echo "[+] Step 4/7: Installing Python dependencies into virtual environment..."
-sudo -u "${SERVICE_USER}" bash -c "
-  cd ${APP_DIR}
-  python3 -m venv .venv
-  .venv/bin/pip install --upgrade pip
-  .venv/bin/pip install -r requirements.txt
-"
+cd "${APP_DIR}"
+
+# Clean up broken venv if prior attempt failed
+if [ -d "${APP_DIR}/.venv" ] && [ ! -f "${APP_DIR}/.venv/bin/pip" ]; then
+  rm -rf "${APP_DIR}/.venv"
+fi
+
+if [ ! -d "${APP_DIR}/.venv" ]; then
+  python3 -m venv "${APP_DIR}/.venv"
+fi
+
+"${APP_DIR}/.venv/bin/pip" install --upgrade pip
+"${APP_DIR}/.venv/bin/pip" install -r "${APP_DIR}/requirements.txt"
+
+# Re-apply ownership to venv and all packages
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}"
 
 # 6. Create Storage & Configure Environment
 echo "[+] Step 5/7: Configuring workspaces and production environment..."
@@ -97,6 +116,7 @@ if [ -n "${API_KEY}" ]; then
   chown "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}/.openrouter_key"
   chmod 600 "${APP_DIR}/.openrouter_key"
 fi
+
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}"
 
 # 7. Configure Systemd Service

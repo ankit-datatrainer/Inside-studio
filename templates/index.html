@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+{% block title %}Upload Data &middot; AI Assistant{% endblock %}
+{% block content %}
+
+<div class="page-head split">
+  <div>
+    <h1>The intelligence in your <em class="editorial">data</em></h1>
+    <p class="muted">
+      Upload <b>Excel, CSV, TSV, or PDF</b> tables &mdash; or select an entire <b>Folder</b>.
+      Chat directly with your AI Assistant right here, or explore automated cleaning, instant charts, and executive reporting.
+    </p>
+  </div>
+  <div class="row-actions">
+    {% if has_existing %}
+      <a href="{{ url_for('profile_page') }}" class="btn ghost small">Continue Analysis &rarr;</a>
+      <a href="{{ url_for('reset') }}" class="btn danger-btn small" onclick="return confirm('Clear dataset and start fresh?');">
+        <svg class="icon sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Clear Data</span>
+      </a>
+    {% endif %}
+    <a href="{{ url_for('chat_page') }}" class="btn primary small">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>Open Dedicated AI Screen &rarr;</span>
+    </a>
+  </div>
+</div>
+
+{% if has_existing %}
+<div class="banner" style="background:#EEF2FF; border:1px solid #C7D2FE; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+  <span><svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Active dataset: <b>{{ existing_file }}</b> ({{ existing_rows }} rows &times; {{ existing_cols }} cols)</span>
+  <div style="display:flex; gap:8px;">
+    <a href="{{ url_for('profile_page') }}" class="btn ghost small">Understand &rarr;</a>
+    <a href="{{ url_for('insights_page') }}" class="btn ghost small">Insights &amp; Charts &rarr;</a>
+    <a href="{{ url_for('dashboard_page') }}" class="btn ghost small">Dashboard &rarr;</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="upload-grid">
+  <!-- Left: Upload Card -->
+  <div class="card upload-card" id="upload-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2>Upload Data</h2>
+      <div style="display:flex; gap:6px;">
+        <span class="badge ok">PDF</span>
+        <span class="badge ok">Excel</span>
+        <span class="badge ok">CSV / TSV</span>
+        <span class="badge">Folders</span>
+      </div>
+    </div>
+
+    <!-- Mode Selector -->
+    <div class="tabs" style="margin-bottom:14px;">
+      <button type="button" class="tab active" id="tab-files-btn"><svg class="icon sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> Choose Files</button>
+      <button type="button" class="tab" id="tab-folder-btn"><svg class="icon sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Select Folder</button>
+    </div>
+
+    <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="upload-form">
+      <label class="dropzone" id="dropzone">
+        <input type="file" name="file" id="file-input"
+               accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt,.pdf" multiple hidden/>
+        <input type="file" name="file" id="folder-input"
+               webkitdirectory directory multiple hidden disabled/>
+        <div class="dz-icon" id="dz-icon"><svg class="icon xl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="dz-title" id="dz-title">Drop files or folder here, or click to browse</div>
+        <div class="dz-sub" id="dz-sub">
+          Excel (.xlsx, .xls), CSV, TSV &amp; PDF &middot; Single or Multiple files &middot; Up to {{ max_mb }} MB
+        </div>
+        <div class="dz-file" id="dz-file"></div>
+      </label>
+
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn primary w-full" type="submit" id="upload-btn" disabled>
+          Analyse Selected Data →
+        </button>
+      </div>
+    </form>
+
+    {% if has_sample %}
+    <div class="or"><span>or explore demo dataset</span></div>
+    <form method="post" action="{{ url_for('load_sample') }}">
+      <button class="btn ghost w-full" type="submit">Open Sample Sales Data</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Right: Interactive AI Assistant in the Upload Area -->
+  <div class="card upload-chat-card" id="upload-chat-card">
+    <div class="upload-chat-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="chat-avatar bot" style="width:28px; height:28px; font-size:11px;">AI</div>
+        <div>
+          <b style="font-size:14.5px; color:var(--ink);">AI Assistant in Upload Area</b>
+          <div style="font-size:11.5px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span class="live-indicator"><span class="dot-online"></span> AI Assistant Ready</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <a href="{{ url_for('chat_page') }}" class="btn ghost small" title="Dedicated Chat Screen">
+          <svg class="icon sm" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Suggested Quick Chips -->
+    <div class="upload-chat-chips">
+      {% for q in chat_suggestions %}
+      <button type="button" class="chat-suggestion-chip upload-suggestion-chip" data-question="{{ q }}">
+        <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>{{ q }}</span>
+      </button>
+      {% endfor %}
+    </div>
+
+    <!-- Scrollable Messages -->
+    <div class="upload-chat-messages" id="upload-chat-messages">
+      <div class="chat-row bot">
+        <div class="chat-avatar bot" style="width:26px; height:26px; font-size:10px;">AI</div>
+        <div class="chat-content">
+          <div class="chat-sender">Insight Studio AI</div>
+          <div class="chat-bubble-screen" style="font-size:13px; padding:10px 14px;">
+            {% if has_existing %}
+              <p>Hello! I'm your AI Analyst. Dataset <strong>{{ existing_file }}</strong> is loaded ({{ existing_rows }} rows &times; {{ existing_cols }} cols).</p>
+              <p>Ask me anything about your numbers, trends, or recommendations &mdash; or select another file on the left to start fresh!</p>
+            {% else %}
+              <p>Welcome! Drop your Excel, CSV, or PDF file into the upload zone on the left, or ask me any question about your data formatting and analysis right here.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Box -->
+    <div class="upload-chat-input-bar">
+      <input type="text" id="upload-chat-input" placeholder="Ask AI about this dataset or supported formats..." autocomplete="off"/>
+      <button type="button" class="btn primary small" id="upload-chat-send">
+        <svg class="icon sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span>Send</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Workflow Highlights Strip -->
+<div class="card" style="margin-top:20px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <h2>Data Intelligence Workflow</h2>
+    <span class="muted small">5-step executive automated pipeline</span>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px;">
+    <div style="border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#FAFBFD;">
+      <b style="font-size:13px; color:var(--ink); display:block; margin-bottom:4px;">1. Multi-Format Ingestion</b>
+      <span class="muted small">Excel (.xlsx/.xls), CSV, TSV, PDF, or full directory batch merger.</span>
+    </div>
+    <div style="border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#FAFBFD;">
+      <b style="font-size:13px; color:var(--ink); display:block; margin-bottom:4px;">2. Instant Profiling</b>
+      <span class="muted small">Data types, statistical summaries, missing values, duplicates, and outliers.</span>
+    </div>
+    <div style="border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#FAFBFD;">
+      <b style="font-size:13px; color:var(--ink); display:block; margin-bottom:4px;">3. Automated Cleaning</b>
+      <span class="muted small">One-click automated repairs for nulls, whitespace, and corrupt fields.</span>
+    </div>
+    <div style="border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#FAFBFD;">
+      <b style="font-size:13px; color:var(--ink); display:block; margin-bottom:4px;">4. Automated Charts &amp; RAG</b>
+      <span class="muted small">Tailored chart recommendations and interactive AI chat assistant.</span>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // 1. Upload Form and Dropzone Handling
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const folderInput = document.getElementById('folder-input');
+  const btn = document.getElementById('upload-btn');
+  const fileLabel = document.getElementById('dz-file');
+  const form = document.getElementById('upload-form');
+  const tabFilesBtn = document.getElementById('tab-files-btn');
+  const tabFolderBtn = document.getElementById('tab-folder-btn');
+  const dzIcon = document.getElementById('dz-icon');
+  const dzTitle = document.getElementById('dz-title');
+  const dzSub = document.getElementById('dz-sub');
+
+  let activeMode = 'files';
+  const ICON_UPLOAD = '<svg class="icon xl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+  const ICON_FOLDER = '<svg class="icon xl" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+
+  function setMode(mode) {
+    activeMode = mode;
+    if (mode === 'files') {
+      tabFilesBtn.classList.add('active');
+      tabFolderBtn.classList.remove('active');
+      fileInput.disabled = false;
+      folderInput.disabled = true;
+      dzIcon.innerHTML = ICON_UPLOAD;
+      dzTitle.textContent = 'Drop file(s) here or click to browse';
+      dzSub.textContent = 'Excel (.xlsx, .xls), CSV, TSV & PDF · Select one or multiple files';
+    } else {
+      tabFolderBtn.classList.add('active');
+      tabFilesBtn.classList.remove('active');
+      folderInput.disabled = false;
+      fileInput.disabled = true;
+      dzIcon.innerHTML = ICON_FOLDER;
+      dzTitle.textContent = 'Click to choose an entire folder';
+      dzSub.textContent = 'All supported files inside the folder will be analyzed and merged';
+    }
+  }
+
+  tabFilesBtn.addEventListener('click', () => setMode('files'));
+  tabFolderBtn.addEventListener('click', () => setMode('folder'));
+
+  function showFiles(files) {
+    if (!files || files.length === 0) return;
+    const count = files.length;
+    let totalBytes = 0;
+    for (let i = 0; i < files.length; i++) totalBytes += files[i].size;
+    const mb = (totalBytes / (1024 * 1024)).toFixed(2);
+    const kb = (totalBytes / 1024).toFixed(1);
+    const sizeStr = totalBytes > 1024 * 1024 ? `${mb} MB` : `${kb} KB`;
+
+    if (count === 1) {
+      fileLabel.innerHTML = `<strong>${files[0].name}</strong> · ${sizeStr}`;
+    } else {
+      const sampleNames = Array.from(files).slice(0, 3).map(f => f.name).join(', ');
+      const more = count > 3 ? ` + ${count - 3} more` : '';
+      fileLabel.innerHTML = `<strong>${count} files selected</strong> (${sizeStr})<br><small style="color:var(--muted)">${sampleNames}${more}</small>`;
+    }
+    btn.disabled = false;
+  }
+
+  fileInput.addEventListener('change', () => showFiles(fileInput.files));
+  folderInput.addEventListener('change', () => showFiles(folderInput.files));
+
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.add('over');
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.remove('over');
+  }));
+
+  dz.addEventListener('drop', e => {
+    if (e.dataTransfer && e.dataTransfer.files.length) {
+      setMode('files');
+      fileInput.files = e.dataTransfer.files;
+      showFiles(fileInput.files);
+    }
+  });
+
+  form.addEventListener('submit', () => {
+    document.getElementById('busy').classList.remove('hidden');
+    document.getElementById('busy-text').textContent = 'Reading and analyzing data…';
+  });
+
+  // 2. Embedded AI Chat Window Logic in Upload Area
+  (function initUploadChat() {
+    const chatInput = document.getElementById('upload-chat-input');
+    const chatSend = document.getElementById('upload-chat-send');
+    const chatMessages = document.getElementById('upload-chat-messages');
+    const chips = document.querySelectorAll('.upload-suggestion-chip');
+    const chatHistory = [];
+
+    function scrollChatBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function appendUserMessage(text) {
+      const row = document.createElement('div');
+      row.className = 'chat-row user';
+      row.innerHTML = `
+        <div class="chat-avatar user">You</div>
+        <div class="chat-content">
+          <div class="chat-sender">You</div>
+          <div class="chat-bubble-screen" style="font-size:13px; padding:10px 14px;">${escapeHtml(text)}</div>
+        </div>
+      `;
+      chatMessages.appendChild(row);
+      scrollChatBottom();
+      chatHistory.push({ role: 'user', content: text });
+    }
+
+    function appendThinking() {
+      const row = document.createElement('div');
+      row.className = 'chat-row bot thinking-row';
+      row.innerHTML = `
+        <div class="chat-avatar bot" style="width:26px; height:26px; font-size:10px;">AI</div>
+        <div class="chat-content">
+          <div class="chat-sender">Insight Studio AI</div>
+          <div class="chat-bubble-screen" style="font-size:13px; padding:10px 14px;">
+            <div class="chat-thinking-dots">
+              <span class="thinking-text" style="margin-right:6px;">Analyzing</span>
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+      `;
+      chatMessages.appendChild(row);
+      scrollChatBottom();
+      return row;
+    }
+
+    function formatInlineMarkdown(text) {
+      let escaped = escapeHtml(text);
+      escaped = escaped.replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, '<pre style="background:#1E293B; color:#F8FAFC; padding:8px 12px; border-radius:6px; font-size:12px; overflow-x:auto;"><code>$1</code></pre>');
+      escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+      escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      escaped = escaped.replace(/\n\n/g, '<br><br>');
+      escaped = escaped.replace(/\n/g, '<br>');
+      return escaped;
+    }
+
+    async function sendQuestion(text) {
+      if (!text || !text.trim()) return;
+      text = text.trim();
+      appendUserMessage(text);
+      if (chatInput) chatInput.value = '';
+
+      const thinkingRow = appendThinking();
+
+      try {
+        const res = await api('/api/chat', {
+          question: text,
+          history: chatHistory.slice(-6),
+        });
+
+        thinkingRow.remove();
+
+        if (!res.ok) {
+          const errRow = document.createElement('div');
+          errRow.className = 'chat-row bot';
+          errRow.innerHTML = `
+            <div class="chat-avatar bot" style="width:26px; height:26px; font-size:10px;">AI</div>
+            <div class="chat-content">
+              <div class="chat-sender">Insight Studio AI</div>
+              <div class="chat-bubble-screen" style="font-size:13px; padding:10px 14px; border-color:#FECACA; background:#FEF2F2; color:#991B1B;">
+                ${escapeHtml(res.error || 'Could not connect to AI service.')}
+              </div>
+            </div>
+          `;
+          chatMessages.appendChild(errRow);
+        } else {
+          const botRow = document.createElement('div');
+          botRow.className = 'chat-row bot';
+          botRow.innerHTML = `
+            <div class="chat-avatar bot" style="width:26px; height:26px; font-size:10px;">AI</div>
+            <div class="chat-content">
+              <div class="chat-sender">Insight Studio AI</div>
+              <div class="chat-bubble-screen" style="font-size:13px; padding:10px 14px;">
+                ${formatInlineMarkdown(res.answer || '')}
+              </div>
+            </div>
+          `;
+          chatMessages.appendChild(botRow);
+          chatHistory.push({ role: 'assistant', content: res.answer || '' });
+        }
+      } catch (err) {
+        thinkingRow.remove();
+        toast('Connection error. Please try again.', 'error');
+      }
+      scrollChatBottom();
+    }
+
+    if (chatSend && chatInput) {
+      chatSend.addEventListener('click', () => sendQuestion(chatInput.value));
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendQuestion(chatInput.value);
+        }
+      });
+    }
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const q = chip.dataset.question;
+        if (q) sendQuestion(q);
+      });
+    });
+
+    // Also support dropping files onto the chat card to select/upload!
+    const chatCard = document.getElementById('upload-chat-card');
+    if (chatCard) {
+      ['dragenter', 'dragover'].forEach(ev => chatCard.addEventListener(ev, e => {
+        e.preventDefault();
+        chatCard.style.outline = '2px dashed var(--accent)';
+      }));
+      ['dragleave', 'drop'].forEach(ev => chatCard.addEventListener(ev, e => {
+        e.preventDefault();
+        chatCard.style.outline = 'none';
+      }));
+      chatCard.addEventListener('drop', e => {
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+          setMode('files');
+          fileInput.files = e.dataTransfer.files;
+          showFiles(fileInput.files);
+          toast(`Selected ${e.dataTransfer.files[0].name} - Click "Analyse Selected Data" to load`, 'info');
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}

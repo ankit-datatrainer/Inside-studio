@@ -1,0 +1,32 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# User session data & uploads (transient)
+workspaces/
+uploads/
+exports/
+*.log
+
+# Sensitive credentials & environment files
+.env
+.openrouter_key
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ code }} — {{ message }}</h1>
+  <p class="muted">The page you were looking for is not here. Head back to the start and try again.</p>
+</div>
+<div class="row-actions">
+  <a class="btn primary" href="{{ url_for('index') }}">Back to start</a>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Insight Studio Production Gunicorn Application
+After=network.target
+
+[Service]
+Type=simple
+User=studio
+Group=studio
+WorkingDirectory=/opt/insight-studio
+EnvironmentFile=/etc/insight-studio.env
+ExecStart=/opt/insight-studio/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8001 --timeout 180 --access-logfile - wsgi:app
+Restart=always
+RestartSec=5
+KillSignal=SIGQUIT
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+# Same analysis stack as the notebook, plus a light web layer.
+pandas>=2.1
+matplotlib>=3.8
+openpyxl>=3.1          # reading .xlsx
+XlsxWriter>=3.2        # writing .xlsx exports
+Pillow>=10.0           # WEBP / JPG / TIFF chart export
+Flask>=3.0
+httpx>=0.24            # OpenRouter AI API calls
+pymupdf>=1.23          # PDF table extraction
+
+# production servers (picked automatically per platform by pip markers)
+gunicorn>=21.2 ; sys_platform != "win32"
+waitress>=3.0 ; sys_platform == "win32"

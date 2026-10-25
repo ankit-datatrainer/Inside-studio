@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% block title %}Insights &amp; Charts{% endblock %}
+{% block content %}
+
+<div class="page-head split">
+  <div>
+    <h1>Insights, KPIs &amp; <em class="editorial">visualizations</em></h1>
+    <p class="muted">
+      {{ "{:,}".format(profile.overview.rows) }} rows &middot; {{ profile.overview.cols }} columns &middot;
+      {{ profile.overview.money_cols|length }} metric column(s), {{ profile.overview.date_cols|length }} date column(s)
+      {% if using_cleaned %}<span class="badge ok">cleaned dataset</span>{% endif %}
+    </p>
+  </div>
+  <div class="row-actions">
+    <a class="btn ghost" href="{{ url_for('clean_page') }}">← Clean Data</a>
+    <a class="btn primary" href="{{ url_for('dashboard_page') }}">Export PDF Dashboard →</a>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<section class="kpi-row">
+  {% for k in kpis %}
+  <div class="kpi-card">
+    <div class="kpi-label">{{ k.label }}</div>
+    <div class="kpi-value">{{ k.value }}</div>
+    <div class="kpi-sub">{{ k.sub }}</div>
+  </div>
+  {% endfor %}
+</section>
+
+<!-- Plain English Findings -->
+<section class="card">
+  <h2>Key Data Findings</h2>
+  <ul class="findings">
+    {% for s in sentences %}
+      <li class="{{ s.kind }}">{{ s.text | markdown_inline | safe }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<!-- Automated Chart Options / Graph Picker -->
+<section class="card" id="auto-charts-section">
+  <div class="card-head">
+    <div>
+      <h2><svg class="icon lg" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Pick &amp; View Graphs (No Manual Building Required)</h2>
+      <span class="muted small">Select how many graphs you want to see. Click any card to render the graph immediately.</span>
+    </div>
+    <div class="row-actions">
+      <span class="muted small">Number of graphs:</span>
+      <div style="display:inline-flex; gap:4px;">
+        <button type="button" class="btn ghost small filter-count" data-count="4">4</button>
+        <button type="button" class="btn ghost small filter-count active" data-count="6">6</button>
+        <button type="button" class="btn ghost small filter-count" data-count="8">8</button>
+        <button type="button" class="btn ghost small filter-count" data-count="12">All</button>
+      </div>
+      <button type="button" class="btn primary small" id="render-all-suggestions-btn"><svg class="icon sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Render All Graphs</button>
+      <button type="button" class="btn ghost small" id="ai-suggest-btn"><svg class="icon sm" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg> Ask AI for Ideas</button>
+    </div>
+  </div>
+
+  <!-- Live Showcase Preview for Selected Chart -->
+  <div id="quick-preview-hero" class="chart-preview hidden" style="margin-bottom:20px; background:#FFFFFF;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div>
+        <span class="badge ok">Active Graph</span>
+        <b id="hero-chart-title" style="font-size:16px; margin-left:8px;"></b>
+      </div>
+      <div class="download-row" id="hero-chart-downloads"></div>
+    </div>
+    <img id="hero-chart-img" style="width:100%; max-height:420px; object-fit:contain; border-radius:10px; border:1px solid var(--line);" alt="Chart Preview"/>
+  </div>
+
+  <div class="chart-cards-grid" id="chart-cards-grid">
+    {% for s in suggestions %}
+    <div class="chart-card-item" data-spec="{{ s | tojson | forceescape }}" data-index="{{ loop.index0 }}">
+      <div class="chart-card-header">
+        <span class="chart-badge">{{ s.chart_type.replace('_', ' ') }}</span>
+        <span class="muted small">Option #{{ loop.index }}</span>
+      </div>
+      <div class="chart-card-body">
+        <div class="chart-card-title">{{ s.title }}</div>
+        <div class="chart-card-reason">{{ s.reason }}</div>
+      </div>
+      <div class="chart-card-preview" id="card-preview-{{ loop.index0 }}">
+        <div class="placeholder">
+          <div class="placeholder-icon"><svg class="icon xl" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div>Click below to render</div>
+        </div>
+        <img class="card-chart-img hidden" alt="{{ s.title }}"/>
+      </div>
+      <div class="chart-card-actions">
+        <button class="btn primary small pick-and-render-btn" type="button">
+          <svg class="icon sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Render Graph</span>
+        </button>
+        <button class="btn ghost small customize-btn" type="button" title="Tweak in custom builder">
+          <span>Customize</span>
+          <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Custom Chart Builder (Advanced) -->
+<details class="card" id="builder" style="cursor:default;">
+  <summary style="font-size:16px; font-weight:700; cursor:pointer; padding:6px 0; display:flex; align-items:center; gap:8px;">
+    <svg class="icon lg" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+    <span>Advanced Custom Chart Builder (Optional)</span>
+    <span class="muted small" style="font-weight:400; margin-left:8px;">Click to expand if you want to configure custom dimensions &amp; colors</span>
+  </summary>
+
+  <div class="build-grid" style="margin-top:16px;">
+    <form id="chart-form" class="chart-form">
+      <div class="field">
+        <label>Chart type</label>
+        <select name="chart_type">
+          {% for t in chart_types %}<option value="{{ t.id }}">{{ t.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>X axis / category</label>
+        <select name="x">
+          <option value="">—</option>
+          {% for c in columns_info %}<option value="{{ c.name }}" data-kind="{{ c.kind }}">{{ c.name }} ({{ c.kind_label }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Y axis / value</label>
+        <select name="y">
+          <option value="">— (count of rows)</option>
+          {% for c in columns_info %}<option value="{{ c.name }}" data-kind="{{ c.kind }}">{{ c.name }} ({{ c.kind_label }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Aggregation</label>
+        <select name="agg">
+          {% for a in aggregations %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Split by (optional)</label>
+        <select name="group">
+          <option value="">—</option>
+          {% for c in columns_info %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Time grouping</label>
+        <select name="freq">
+          {% for f in frequencies %}<option value="{{ f.id }}" {% if f.id == 'M' %}selected{% endif %}>{{ f.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Top N (0 = all)</label>
+        <input type="number" name="top_n" value="0" min="0" max="50"/>
+      </div>
+      <div class="field">
+        <label>Histogram bins</label>
+        <input type="number" name="bins" value="20" min="3" max="100"/>
+      </div>
+      <div class="field">
+        <label>Colour palette</label>
+        <select name="palette">
+          {% for p in palettes %}<option value="{{ p }}">{{ p|title }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field wide">
+        <label>Chart title (optional)</label>
+        <input type="text" name="title" placeholder="Auto-generated if empty"/>
+      </div>
+      <div class="field">
+        <label>Width (in) <input type="number" name="width" value="10" min="4" max="20" step="0.5"/></label>
+      </div>
+      <div class="field">
+        <label>Height (in) <input type="number" name="height" value="5.5" min="3" max="15" step="0.5"/></label>
+      </div>
+      <div class="field check">
+        <label><input type="checkbox" name="show_values" checked/> Show value labels</label>
+      </div>
+      <div class="field check">
+        <label><input type="checkbox" name="on_dashboard" checked/> Add to dashboard when rendered</label>
+      </div>
+      <div class="field wide row-actions">
+        <button class="btn primary" type="submit">Render Custom Chart</button>
+        <button class="btn ghost" type="reset">Clear</button>
+      </div>
+    </form>
+
+    <div class="chart-preview">
+      <div id="preview-empty" class="preview-empty">
+        <div class="pe-icon"><svg class="icon xxl" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <p>Custom chart preview.<br/><span class="muted small">Configure fields on the left and click Render.</span></p>
+      </div>
+      <div id="preview-box" class="hidden">
+        <img id="preview-img" alt="chart preview"/>
+        <div class="preview-meta">
+          <b id="preview-title"></b>
+          <span class="muted small" id="preview-note"></span>
+        </div>
+        <div class="download-row">
+          <span class="muted small">Download:</span>
+          <span id="download-links"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</details>
+
+<!-- Saved Charts / Gallery -->
+<section class="card">
+  <div class="card-head">
+    <h2>Saved Charts ({{ saved_charts|length }})</h2>
+    <span class="muted small">Charts included in the PDF/HTML dashboard report.</span>
+  </div>
+  {% if saved_charts %}
+  <div class="gallery">
+    {% for c in saved_charts %}
+    <div class="gallery-item" data-id="{{ c.id }}">
+      <img src="{{ url_for('chart_image', chart_id=c.id) }}" alt="{{ c.title }}"/>
+      <div class="gi-body">
+        <b>{{ c.title }}</b>
+        <span class="muted small">{{ c.spec.chart_type.replace('_',' ') }} · {{ c.spec.x or 'all columns' }}{% if c.spec.y %} × {{ c.spec.y }}{% endif %}</span>
+        <div class="gi-actions">
+          <button class="btn ghost small toggle-dash" data-id="{{ c.id }}" data-on="{{ '0' if c.on_dashboard else '1' }}">
+            {{ 'Remove from dashboard' if c.on_dashboard else 'Add to dashboard' }}
+          </button>
+          <span class="badge {{ 'ok' if c.on_dashboard }}">{{ 'in dashboard' if c.on_dashboard else 'saved' }}</span>
+          <button class="btn ghost small danger delete-chart" data-id="{{ c.id }}">Delete</button>
+        </div>
+        <div class="download-row small">
+          {% for f in export_formats %}
+            <a class="dl" href="{{ url_for('chart_download', chart_id=c.id, fmt=f.id) }}">{{ f.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No charts rendered yet. Click "Render Graph" on any card above!</p>
+  {% endif %}
+</section>
+
+<!-- Group-by Table Builder -->
+<section class="card">
+  <div class="card-head">
+    <h2>Analysis Tables (Group-By)</h2>
+    <span class="muted small">Combine categorical columns and numeric aggregates into summary tables.</span>
+  </div>
+
+  <div class="table-builder">
+    <div class="tb-left">
+      <div class="field wide">
+        <label>Group by (pick one or more)</label>
+        <select id="tb-rows" multiple size="6">
+          {% for c in columns_info %}
+            {% if c.kind in ('categorical','identifier','boolean','date') or c.kind == 'text' %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field wide">
+        <label>Metrics</label>
+        <div class="metric-picker">
+          <select id="tb-metric-col">
+            {% for c in columns_info %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+            <option value="__rows__">(row count)</option>
+          </select>
+          <select id="tb-metric-agg">
+            <option value="sum">sum</option>
+            <option value="mean">average</option>
+            <option value="median">median</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="std">std dev</option>
+            <option value="nunique">unique count</option>
+            <option value="count">count</option>
+          </select>
+          <button class="btn ghost small" type="button" id="tb-add-metric">+ Add metric</button>
+        </div>
+        <div id="tb-metrics" class="chips"></div>
+      </div>
+      <div class="field wide">
+        <label>Table title</label>
+        <input type="text" id="tb-title" placeholder="Custom analysis"/>
+      </div>
+      <div class="row-actions">
+        <button class="btn primary" type="button" id="tb-build">Build table</button>
+        <label class="inline small muted"><input type="checkbox" id="tb-dash" checked/> add to dashboard</label>
+      </div>
+    </div>
+
+    <div class="tb-right">
+      <div id="tb-result" class="table-wrap hidden">
+        <h3 id="tb-result-title" class="sub"></h3>
+        <div id="tb-result-table"></div>
+        <div class="row-actions">
+          <a class="btn ghost small" id="tb-csv" href="#">Download CSV</a>
+          <button class="btn ghost small" type="button" id="tb-save">Save to dashboard</button>
+        </div>
+      </div>
+      <div id="tb-empty" class="preview-empty">
+        <div class="pe-icon"><svg class="icon xxl" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg></div>
+        <p>Build a table: pick group columns and metrics.<br/>
+        <span class="muted small">Example: group by Category → sum of Revenue.</span></p>
+      </div>
+    </div>
+  </div>
+
+  {% if auto_tables %}
+  <div class="auto-tables">
+    <h3 class="sub">Ready-made tables for this file</h3>
+    <div class="suggestion-grid">
+      {% for t in auto_tables %}
+      <div class="suggestion auto-table" data-group="{{ t.group_cols | tojson | forceescape }}" data-metrics="{{ t.metrics | tojson | forceescape }}" data-title="{{ t.title }}">
+        <div class="sg-type">{{ t.total_rows }} groups</div>
+        <div class="sg-title">{{ t.title }}</div>
+        <div class="sg-reason">Columns: {{ t.columns[:4]|join(', ') }}{% if t.columns|length > 4 %}…{% endif %}</div>
+        <button class="btn ghost small load-table" type="button">Load in builder →</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const COLUMNS = {{ columns_info | tojson }};
+  initTabs('insights');
+  initChartBuilder(COLUMNS);
+  initTableBuilder();
+  initGallery();
+
+  // Graph options filter & picker logic
+  function setupGraphPicker() {
+    const cards = document.querySelectorAll('.chart-card-item');
+    const countBtns = document.querySelectorAll('.filter-count');
+    const hero = document.getElementById('quick-preview-hero');
+    const heroTitle = document.getElementById('hero-chart-title');
+    const heroImg = document.getElementById('hero-chart-img');
+    const heroDownloads = document.getElementById('hero-chart-downloads');
+    const renderAllBtn = document.getElementById('render-all-suggestions-btn');
+    const aiBtn = document.getElementById('ai-suggest-btn');
+
+    // 1. Number of graphs filter
+    function applyCountFilter(count) {
+      cards.forEach((card, idx) => {
+        card.style.display = idx < count ? 'flex' : 'none';
+      });
+    }
+
+    countBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        countBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const count = parseInt(btn.dataset.count, 10);
+        applyCountFilter(count);
+      });
+    });
+
+    // Default to 6 visible graphs
+    applyCountFilter(6);
+
+    // 2. Render individual card
+    async function renderCard(card) {
+      const specStr = card.dataset.spec;
+      if (!specStr) return;
+      let spec;
+      try { spec = JSON.parse(specStr); } catch (e) { return; }
+
+      const previewDiv = card.querySelector('.chart-card-preview');
+      const placeholder = previewDiv.querySelector('.placeholder');
+      const img = previewDiv.querySelector('.card-chart-img');
+      const btn = card.querySelector('.pick-and-render-btn');
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Rendering…';
+      }
+
+      const res = await api('/api/chart/render', {
+        ...spec,
+        on_dashboard: true,
+      });
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Rendered</span>';
+      }
+
+      if (res.ok && res.chart) {
+        placeholder.classList.add('hidden');
+        img.src = res.chart.image_url + '?t=' + Date.now();
+        img.classList.remove('hidden');
+        card.classList.add('selected');
+
+        // Update live hero showcase
+        heroTitle.textContent = res.chart.title;
+        heroImg.src = res.chart.image_url + '?t=' + Date.now();
+        heroDownloads.innerHTML = (res.downloads || []).map(dl =>
+          `<a class="dl" href="${dl.url}" target="_blank">${dl.label}</a>`
+        ).join(' ');
+        hero.classList.remove('hidden');
+
+        toast(`"${res.chart.title}" rendered and added to dashboard!`, 'success');
+      } else {
+        toast(res.error || 'Failed to render graph', 'error');
+      }
+    }
+
+    cards.forEach(card => {
+      const renderBtn = card.querySelector('.pick-and-render-btn');
+      if (renderBtn) {
+        renderBtn.addEventListener('click', () => renderCard(card));
+      }
+
+      // Customize in form
+      const custBtn = card.querySelector('.customize-btn');
+      if (custBtn) {
+        custBtn.addEventListener('click', () => {
+          let spec;
+          try { spec = JSON.parse(card.dataset.spec); } catch(e) { return; }
+          const builder = document.getElementById('builder');
+          if (builder) builder.open = true;
+          const form = document.getElementById('chart-form');
+          if (form) {
+            for (const [k, v] of Object.entries(spec)) {
+              if (form.elements[k]) form.elements[k].value = v;
+            }
+            form.scrollIntoView({ behavior: 'smooth' });
+          }
+        });
+      }
+    });
+
+    // 3. Render all visible graphs button
+    if (renderAllBtn) {
+      renderAllBtn.addEventListener('click', async () => {
+        const visibleCards = Array.from(cards).filter(c => c.style.display !== 'none');
+        if (!visibleCards.length) return;
+        busy(true, `Rendering ${visibleCards.length} charts…`);
+        for (const card of visibleCards) {
+          await renderCard(card);
+        }
+        busy(false);
+        toast(`All ${visibleCards.length} graphs generated!`, 'success');
+      });
+    }
+
+    // 4. AI suggestions button
+    if (aiBtn) {
+      aiBtn.addEventListener('click', async () => {
+        busy(true, 'Consulting AI for graph recommendations…');
+        const res = await api('/api/ai/suggest-charts', {});
+        busy(false);
+        if (!res.ok) {
+          toast(res.error || 'Could not get AI suggestions', 'error');
+          return;
+        }
+
+        const suggestions = res.suggestions || [];
+        if (!suggestions.length) {
+          toast('No additional suggestions returned by AI.', 'info');
+          return;
+        }
+
+        const grid = document.getElementById('chart-cards-grid');
+        suggestions.forEach((s) => {
+          const div = document.createElement('div');
+          div.className = 'chart-card-item';
+          div.style.display = 'flex';
+          div.dataset.spec = JSON.stringify(s);
+          div.innerHTML = `
+            <div class="chart-card-header">
+              <span class="chart-badge" style="background:#FDF2F8; color:#BE185D;">AI · ${(s.chart_type || 'chart').toUpperCase()}</span>
+              <span class="badge ok">AI Recommended</span>
+            </div>
+            <div class="chart-card-body">
+              <div class="chart-card-title">${escapeHtml(s.title || 'Insight Chart')}</div>
+              <div class="chart-card-reason">${escapeHtml(s.reason || 'Discovered by AI model based on data patterns')}</div>
+            </div>
+            <div class="chart-card-preview">
+              <div class="placeholder"><div class="placeholder-icon"><svg class="icon xl" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg></div><div>AI suggested graph</div></div>
+              <img class="card-chart-img hidden" alt="${escapeHtml(s.title || '')}"/>
+            </div>
+            <div class="chart-card-actions">
+              <button class="btn primary small pick-and-render-btn" type="button"><svg class="icon sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> <span>Render Graph</span></button>
+            </div>
+          `;
+          grid.insertBefore(div, grid.firstChild);
+          const btn = div.querySelector('.pick-and-render-btn');
+          if (btn) btn.addEventListener('click', () => renderCard(div));
+        });
+        grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        toast(`Added ${suggestions.length} AI-recommended charts!`, 'success');
+      });
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  if (!window._graphPickerInitialized) {
+    window._graphPickerInitialized = true;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupGraphPicker);
+    } else {
+      setupGraphPicker();
+    }
+  }
+</script>
+{% endblock %}

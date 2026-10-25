@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}Clean Data{% endblock %}
+{% block content %}
+
+<div class="page-head split">
+  <div>
+    <h1>Clean data with <em class="editorial">precision</em></h1>
+    <p class="muted">
+      {{ "{:,}".format(raw_shape[0]) }} rows &middot; {{ raw_shape[1] }} columns in the dataset.
+      Review the mistakes detected below, clean them in one click, and proceed straight to charts.
+    </p>
+  </div>
+  <div class="row-actions">
+    {% if cleaned_at %}
+      <form method="post" action="{{ url_for('clean_reset') }}"
+            onsubmit="return confirm('Remove the cleaned copy and go back to the original file?');">
+        <button class="btn ghost" type="submit">Reset to original</button>
+      </form>
+    {% endif %}
+    <a class="btn ghost" href="{{ url_for('quality_page') }}">← Quality Checker &amp; Preview</a>
+    <button type="button" class="btn ghost" id="btn-clean-quality-pdf" title="Download Data Quality Report PDF">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Quality Report (PDF)</span>
+    </button>
+    <a class="btn primary" href="{{ url_for('insights_page') }}">Go to charts →</a>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('clean_apply') }}" id="clean-form">
+
+  <!-- Mistakes & Quality Issues Summary Hero -->
+  <div class="issue-hero {% if issue_summary and issue_summary.total_missing == 0 and issue_summary.duplicate_rows == 0 %}clean-pass{% endif %}">
+    <div class="issue-hero-head">
+      <div>
+        <div class="issue-hero-title">
+          {% if issue_summary and (issue_summary.total_missing > 0 or issue_summary.duplicate_rows > 0) %}
+            <svg class="icon lg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Quality Issues &amp; Mistakes Found in Your Data</span>
+          {% else %}
+            <svg class="icon lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>Great news — No critical duplicates or null values detected!</span>
+          {% endif %}
+        </div>
+        <div class="muted small" style="margin-top:4px;">
+          One click fixes missing values, removes duplicates, trims whitespace, standardizes column names, and handles outliers.
+        </div>
+      </div>
+      <div>
+        <button type="submit" name="action" value="clean_and_insights" class="btn primary" style="font-size:14.5px; padding:11px 22px; font-weight:700;">
+          <svg class="icon" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg>
+          <span>Clean Data &amp; Move to Charts →</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="issue-stats-pills">
+      {% if issue_summary %}
+        <div class="issue-pill">
+          <span>Missing values:</span>
+          <b>{{ "{:,}".format(issue_summary.total_missing) }} cells</b>
+          {% if issue_summary.missing_cols %}
+            <span>({{ issue_summary.missing_cols|length }} column{{ 's' if issue_summary.missing_cols|length > 1 else '' }})</span>
+          {% endif %}
+        </div>
+        <div class="issue-pill">
+          <span>Duplicate rows:</span>
+          <b>{{ "{:,}".format(issue_summary.duplicate_rows) }} rows</b>
+        </div>
+        <div class="issue-pill">
+          <span>Recommended fixes:</span>
+          <b>{{ issue_summary.suggested_steps_count }} automated step{{ 's' if issue_summary.suggested_steps_count > 1 else '' }}</b>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if cleaned_at %}
+  <section class="card success-card" style="margin-bottom:20px;">
+    <div class="card-head">
+      <h2><svg class="icon lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Cleaning Applied <span class="muted small">({{ cleaned_at }})</span></h2>
+    </div>
+    {% if log and log.before_after %}
+    <div class="delta-row">
+      {% set ba = log.before_after %}
+      <div class="delta"><span>Rows</span><b>{{ "{:,}".format(ba.rows[0]) }} → {{ "{:,}".format(ba.rows[1]) }}</b></div>
+      <div class="delta"><span>Columns</span><b>{{ ba.cols[0] }} → {{ ba.cols[1] }}</b></div>
+      <div class="delta"><span>Missing cells</span><b>{{ "{:,}".format(ba.missing[0]) }} → {{ "{:,}".format(ba.missing[1]) }}</b></div>
+      <div class="delta"><span>Duplicate rows</span><b>{{ ba.duplicates[0] }} → {{ ba.duplicates[1] }}</b></div>
+    </div>
+    {% endif %}
+
+    {% if log and log.steps %}
+    <details class="log-box">
+      <summary>Review audit log ({{ log.steps|length }} steps applied)</summary>
+      <ul class="log-list">
+        {% for s in log.steps %}
+        <li class="{{ 'ok' if s.ok else 'bad' }}"><b>{{ s.title }}</b> — {{ s.detail }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% if preview %}
+    <details class="log-box">
+      <summary>Cleaned data preview ({{ preview.shape[0] }} rows &times; {{ preview.shape[1] }} columns)</summary>
+      <div class="table-wrap">
+        <table class="data compact">
+          <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in preview.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="row-actions" style="margin-top:10px;">
+        <a class="btn ghost small" href="{{ url_for('download_cleaned', fmt='csv') }}">Download Cleaned CSV</a>
+        <a class="btn ghost small" href="{{ url_for('download_cleaned', fmt='xlsx') }}">Download Cleaned Excel</a>
+      </div>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <!-- Detailed Step Toggles -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>Step Details &amp; Custom Options</h2>
+        <span class="muted small">Every rule below was auto-configured based on your data types.</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn ghost small" type="button" id="toggle-all" data-on="1">Select all</button>
+        <button class="btn ghost small" type="button" id="toggle-none" data-on="0">Clear all</button>
+      </div>
+    </div>
+
+    <div class="steps-list">
+      {% for step in plan %}
+      <div class="clean-step" data-step="{{ step.id }}">
+        <div class="cs-head">
+          <label class="switch">
+            <input type="checkbox" name="enable__{{ step.id }}" {% if step.render_checked %}checked{% endif %}
+                   class="step-toggle" data-step="{{ step.id }}"/>
+            <span class="slider"></span>
+          </label>
+          <div class="cs-title">
+            <b>{{ step.title }}</b>
+            <span class="muted small">{{ step.description }}</span>
+          </div>
+          <div class="cs-impact">
+            {% if step.columns %}<span class="badge">{{ step.columns|length }} col</span>{% endif %}
+            <span class="muted small">{{ step.impact }}</span>
+          </div>
+        </div>
+
+        {% if step.type == 'fill_missing' %}
+        <div class="cs-body">
+          <table class="mini-table">
+            <thead><tr><th>Column</th><th>Strategy</th><th>Constant value</th></tr></thead>
+            <tbody>
+              {% for col, cfg in step.params.strategies.items() %}
+              <tr>
+                <td class="strong">{{ col }}</td>
+                <td>
+                  <select name="strategy__{{ col }}">
+                    {% for opt, label in [('median','Median (numbers)'),('mean','Mean (numbers)'),('mode','Most common'),('zero','Zero'),('constant','Fixed value'),('ffill','Copy previous row'),('drop_rows','Delete rows'),('drop_column','Drop the column'),('leave','Leave as-is')] %}
+                    <option value="{{ opt }}" {% if cfg.strategy == opt %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td><input type="text" name="value__{{ col }}" value="{{ cfg.value or '' }}" placeholder="used with Fixed value"/></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+
+        {% if step.type == 'derived_columns' %}
+        <div class="cs-body">
+          <table class="mini-table derived-table">
+            <thead><tr><th>New column</th><th>Formula (pandas-style)</th><th></th></tr></thead>
+            <tbody id="derived-body">
+              {% for row in step.params.rows %}
+              <tr>
+                <td><input type="text" name="derived_name" value="{{ row.name }}"/></td>
+                <td><input type="text" name="derived_expr" value="{{ row.expression }}"/></td>
+                <td><button type="button" class="btn ghost small rm-row" title="Remove">&times;</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="row-actions">
+            <button type="button" class="btn ghost small" id="add-derived">+ Add formula</button>
+            <span class="muted small">Available columns: <code>{{ columns_hint }}</code></span>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if step.type == 'cap_outliers' %}
+        <div class="cs-body">
+          <label class="inline-field">
+            <span>IQR multiplier:</span>
+            <input type="number" step="0.1" min="1.0" max="5.0" name="outlier_factor"
+                   value="{{ step.params.factor or 1.5 }}" style="width:90px;"/>
+            <span class="muted small">1.5 is standard, 3.0 only caps extreme outliers</span>
+          </label>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="row-actions" style="margin-top:20px; border-top:1px solid var(--line); padding-top:16px; justify-content:space-between;">
+      <button class="btn primary" type="submit" name="action" value="clean_and_insights">
+        <svg class="icon" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg>
+        <span>Clean Data &amp; Move to Charts →</span>
+      </button>
+      <button class="btn ghost" type="submit" name="action" value="custom">
+        Apply Selected Steps Only
+      </button>
+    </div>
+  </section>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('toggle-all').addEventListener('click', () => {
+    document.querySelectorAll('.step-toggle').forEach(t => t.checked = true);
+  });
+  document.getElementById('toggle-none').addEventListener('click', () => {
+    document.querySelectorAll('.step-toggle').forEach(t => t.checked = false);
+  });
+
+  const body = document.getElementById('derived-body');
+  const addBtn = document.getElementById('add-derived');
+  if (addBtn && body) {
+    addBtn.addEventListener('click', () => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td><input type="text" name="derived_name" placeholder="New_Column"/></td>
+                       <td><input type="text" name="derived_expr" placeholder="Col_A * Col_B"/></td>
+                       <td><button type="button" class="btn ghost small rm-row" title="Remove">&times;</button></td>`;
+      body.appendChild(row);
+    });
+    body.addEventListener('click', e => {
+      if (e.target.classList.contains('rm-row')) e.target.closest('tr').remove();
+    });
+  }
+
+  document.getElementById('btn-clean-quality-pdf')?.addEventListener('click', () => {
+    downloadWithProgress('{{ url_for("quality_download", fmt="pdf") }}', 'data_quality_report.pdf', {
+      title: 'Data Quality Executive Report (PDF)',
+      sub: 'Auditing dataset & rendering publication report',
+      steps: [
+        'Auditing dataset health & anomaly metrics...',
+        'Compiling executive scorecard & matrices...',
+        'Rendering vector PDF publication pages...',
+        'Finalizing download...'
+      ]
+    });
+  });
+
+  document.getElementById('clean-form')?.addEventListener('submit', () => {
+    document.getElementById('busy').classList.remove('hidden');
+    document.getElementById('busy-text').textContent = 'Cleaning your data and preparing charts…';
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Choose sheet{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Choose the sheet to analyse</h1>
+  <p class="muted">Your workbook has {{ previews|length }} sheets. Pick the one that holds the data table.</p>
+</div>
+
+<form method="post" action="{{ url_for('sheet_page') }}">
+  <div class="sheet-grid">
+    {% for s in previews %}
+    <label class="card sheet-card">
+      <input type="radio" name="sheet" value="{{ s.name }}" {% if loop.first %}checked{% endif %}/>
+      <div class="sheet-name">{{ s.name }}</div>
+      <div class="sheet-meta">
+        {% if s.rows is not none %}{{ "{:,}".format(s.rows) }} rows &middot; {{ s.cols }} columns{% else %}preview unavailable{% endif %}
+      </div>
+      <div class="sheet-pick">Select</div>
+    </label>
+    {% endfor %}
+  </div>
+  <div class="row-actions">
+    <button class="btn primary" type="submit">Use this sheet</button>
+    <a class="btn ghost" href="{{ url_for('index') }}">Upload a different file</a>
+  </div>
+</form>
+
+{% endblock %}

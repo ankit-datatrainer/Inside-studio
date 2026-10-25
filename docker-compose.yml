@@ -1,0 +1,20 @@
+services:
+  insight-studio:
+    build: .
+    image: insight-studio:latest
+    container_name: insight-studio
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+      SECRET_KEY: "please-change-this-to-a-long-random-string"
+      WORKSPACE_TTL_HOURS: "48"
+      MAX_UPLOAD_MB: "100"
+      # Set to "1" once the site is served over HTTPS.
+      SESSION_COOKIE_SECURE: "0"
+    volumes:
+      - studio-data:/data/workspaces
+
+volumes:
+  studio-data:

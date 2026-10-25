@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+{% block title %}AI Assistant &middot; {{ dataset.name }}{% endblock %}
+
+{% block content %}
+<div class="chat-screen-wrapper">
+
+  <!-- Screen Header -->
+  <div class="page-head split" style="margin-bottom:14px;">
+    <div>
+      <h1 style="display:flex; align-items:center; gap:10px;">
+        <svg class="icon lg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        AI Assistant &amp; <em class="editorial">intelligence</em>
+      </h1>
+      <p class="muted">
+        Ask natural-language questions, explore relationships, detect outliers, and discover actionable chart ideas.
+      </p>
+      <div class="chat-meta-bar">
+        <span class="badge">{{ dataset.name }}</span>
+        {% if dataset.sheet %}<span class="badge">Sheet: {{ dataset.sheet }}</span>{% endif %}
+        <span class="badge">{{ dataset.rows }} rows &times; {{ dataset.cols }} cols</span>
+        {% if dataset.is_cleaned %}
+          <span class="badge ok">Cleaned Data</span>
+        {% else %}
+          <span class="badge">Original Data</span>
+        {% endif %}
+        <span class="badge model-pill">
+          <span class="dot-online"></span> AI Assistant Active
+        </span>
+      </div>
+    </div>
+    <div class="row-actions" style="align-items:flex-start;">
+      <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="chat-header-upload-form" style="display:inline-block; margin:0;">
+        <input type="hidden" name="next" value="chat"/>
+        <label class="btn ghost small" style="cursor:pointer; margin:0;" title="Upload or Switch File">
+          <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Upload File</span>
+          <input type="file" name="file" id="chat-header-file-input" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt,.pdf" multiple hidden onchange="this.form.submit();"/>
+        </label>
+      </form>
+      <button class="btn ghost small" id="screen-clear-chat" type="button">
+        <svg class="icon sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Clear History</span>
+      </button>
+      {% if has_dataset %}
+      <a class="btn ghost small" href="{{ url_for('insights_page') }}">
+        <svg class="icon sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Insights &amp; Charts</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Suggested Question Chips -->
+  <div class="chat-suggestions-section">
+    <div class="chat-suggestions-title">
+      <svg class="icon sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>Suggested questions {% if has_dataset %}for this dataset{% else %}about Insight Studio{% endif %}:</span>
+    </div>
+    <div class="chat-suggestions-chips">
+      {% for q in suggestions %}
+      <button class="chat-suggestion-chip" type="button" data-question="{{ q }}">
+        <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>{{ q }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Dedicated Chat Card -->
+  <div class="chat-screen-card" id="chat-screen-card">
+    <div class="chat-screen-header">
+      <div class="csh-left">
+        <span class="live-indicator"><span class="dot-online"></span> Ready</span>
+        {% if has_dataset %}
+          <span class="muted small">Indexed: <strong>{{ dataset.rows }} rows</strong> &middot; <strong>{{ dataset.cols }} columns</strong></span>
+        {% else %}
+          <span class="muted small">No file loaded yet &middot; Upload below or drop file to chat</span>
+        {% endif %}
+      </div>
+      <div class="csh-right">
+        {% if has_dataset and dataset.columns %}
+        <span class="muted small" title="{{ dataset.columns | join(', ') }}">
+          Fields: {{ dataset.columns[:5] | join(', ') }}{% if dataset.columns|length > 5 %} +{{ dataset.columns|length - 5 }} more{% endif %}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Messages Container -->
+    <div class="chat-screen-messages" id="chat-screen-messages">
+      <!-- Bot Initial Welcome -->
+      <div class="chat-row bot">
+        <div class="chat-avatar bot">AI</div>
+        <div class="chat-content">
+          <div class="chat-sender">Insight Studio AI <span class="chat-time">Just now</span></div>
+          <div class="chat-bubble-screen">
+            {% if has_dataset %}
+              <p>
+                Hello! I'm your dedicated <strong>AI Data Analyst</strong>. I have loaded and indexed <strong>{{ dataset.name }}</strong> ({{ dataset.rows }} rows &times; {{ dataset.cols }} columns).
+              </p>
+              <p>You can ask me anything about this dataset, such as:</p>
+              <ul>
+                <li><strong>Summarize</strong> key business takeaways, trends, and outliers.</li>
+                <li><strong>Breakdown</strong> metrics across specific categories (e.g. sales by region or product).</li>
+                <li><strong>Find anomalies</strong>, data quality risks, or suspicious values.</li>
+                <li><strong>Recommend charts</strong> or KPI metrics for your dashboard export.</li>
+              </ul>
+              <p>Click any of the suggested chips above or type your question below to begin!</p>
+            {% else %}
+              <p>
+                Hello! Welcome to <strong>Insight Studio AI</strong>. You can upload an Excel (.xlsx, .xls), CSV, TSV, or PDF file right below to start a data-aware analysis session, or ask me any question about data formatting and analysis features.
+              </p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if not has_dataset %}
+      <!-- Embedded Upload Dropzone in the AI Assistant -->
+      <div class="chat-upload-dropzone-box" id="chat-page-dropzone">
+        <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="chat-dropzone-form">
+          <input type="hidden" name="next" value="chat"/>
+          <input type="file" name="file" id="chat-screen-file-input" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt,.pdf" multiple hidden onchange="this.form.submit();"/>
+          <div style="color:var(--accent); margin-bottom:8px;">
+            <svg class="icon xl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div style="font-size:15px; font-weight:600; color:var(--ink); margin-bottom:4px;">
+            Drop your dataset here to analyze &amp; chat with AI
+          </div>
+          <div class="muted small" style="margin-bottom:14px;">
+            Excel (.xlsx, .xls), CSV, TSV &amp; PDF &middot; Single or Multiple files &middot; Up to {{ max_mb }} MB
+          </div>
+          <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn primary small" onclick="document.getElementById('chat-screen-file-input').click();">
+              <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Browse File(s)</span>
+            </button>
+            {% if has_sample %}
+            <button type="submit" formaction="{{ url_for('load_sample') }}" class="btn ghost small">Open Sample Sales Data</button>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Input Bar -->
+    <div class="chat-screen-input-bar">
+      <div class="chat-input-container">
+        <textarea id="chat-screen-input" rows="1" placeholder="Ask anything about your data... (e.g. Which product category had the highest revenue, and what was the profit margin?)" autocomplete="off"></textarea>
+      </div>
+      <button class="btn primary chat-screen-send-btn" id="chat-screen-send" type="button">
+        <svg class="icon sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span>Send</span>
+      </button>
+    </div>
+    <div class="chat-screen-footer-hint">
+      <span>Press <strong>Enter</strong> to send, <strong>Shift + Enter</strong> for a new line &middot; Full schema, statistical summaries, and sample rows are provided to the model.</span>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const messagesEl = document.getElementById('chat-screen-messages');
+  const inputEl = document.getElementById('chat-screen-input');
+  const sendBtn = document.getElementById('chat-screen-send');
+  const clearBtn = document.getElementById('screen-clear-chat');
+  const chips = document.querySelectorAll('.chat-suggestion-chip');
+
+  const chatHistory = [];
+
+  // Auto-resize textarea
+  if (inputEl) {
+    inputEl.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+    inputEl.focus();
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function getTimeStr() {
+    const d = new Date();
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatMarkdown(text) {
+    let escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Fenced code blocks ```lang ... ```
+    escaped = escaped.replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, '<pre style="background:#1E293B; color:#F8FAFC; padding:10px 14px; border-radius:8px; overflow-x:auto; margin:8px 0; font-size:12.5px; font-family:monospace;"><code>$1</code></pre>');
+
+    // Double-backtick or single-backtick inline code
+    escaped = escaped.replace(/``([^`]+)``/g, '<code>$1</code>');
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Headings
+    escaped = escaped.replace(/^### (.*$)/gm, '<h4 style="margin:14px 0 6px; font-size:14.5px; font-weight:700; color:var(--ink);">$1</h4>');
+    escaped = escaped.replace(/^## (.*$)/gm, '<h3 style="margin:16px 0 8px; font-size:15.5px; font-weight:700; color:var(--ink);">$1</h3>');
+    escaped = escaped.replace(/^# (.*$)/gm, '<h2 style="margin:18px 0 10px; font-size:16.5px; font-weight:700; color:var(--ink);">$1</h2>');
+
+    // Horizontal dividers
+    escaped = escaped.replace(/^\s*---\s*$/gm, '<hr style="border:none; border-top:1px solid var(--line); margin:12px 0;"/>');
+
+    // Pipe tables or double pipe rows
+    escaped = escaped.replace(/\|\|/g, '<br/>');
+
+    // Bold & italic
+    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Bullet lists
+    escaped = escaped.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
+    escaped = escaped.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+    // Paragraphs
+    escaped = escaped.replace(/\n\n+/g, '</p><p>');
+    return `<p>${escaped}</p>`;
+  }
+
+  function appendMessage(role, htmlContent, rawText) {
+    const row = document.createElement('div');
+    row.className = `chat-row ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = `chat-avatar ${role}`;
+    avatar.textContent = role === 'user' ? 'YOU' : 'AI';
+
+    const content = document.createElement('div');
+    content.className = 'chat-content';
+
+    const sender = document.createElement('div');
+    sender.className = 'chat-sender';
+    sender.innerHTML = `${role === 'user' ? 'You' : 'Insight Studio AI'} <span class="chat-time">${getTimeStr()}</span>`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble-screen';
+    bubble.innerHTML = htmlContent;
+
+    content.appendChild(sender);
+    content.appendChild(bubble);
+
+    // If bot response, append action row (Copy button)
+    if (role === 'bot' && rawText) {
+      const actions = document.createElement('div');
+      actions.className = 'chat-msg-actions';
+      actions.innerHTML = `
+        <button class="chat-action-btn copy-btn" type="button" title="Copy answer to clipboard">
+          <svg class="icon sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>Copy</span>
+        </button>
+      `;
+      const copyBtn = actions.querySelector('.copy-btn');
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(rawText);
+          copyBtn.innerHTML = `
+            <svg class="icon sm" viewBox="0 0 24 24" style="color:#10B981;"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style="color:#10B981;">Copied!</span>
+          `;
+          setTimeout(() => {
+            copyBtn.innerHTML = `
+              <svg class="icon sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy</span>
+            `;
+          }, 2000);
+        } catch (err) {
+          toast('Could not copy to clipboard', 'error');
+        }
+      });
+      content.appendChild(actions);
+    }
+
+    row.appendChild(avatar);
+    row.appendChild(content);
+
+    messagesEl.appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  function appendThinking() {
+    const row = document.createElement('div');
+    row.className = 'chat-row bot thinking';
+    row.innerHTML = `
+      <div class="chat-avatar bot">AI</div>
+      <div class="chat-content">
+        <div class="chat-sender">Insight Studio AI <span class="chat-time">${getTimeStr()}</span></div>
+        <div class="chat-bubble-screen">
+          <div class="chat-thinking-dots">
+            <span></span><span></span><span></span>
+            <span class="thinking-text">Analyzing dataset with AI…</span>
+          </div>
+        </div>
+      </div>
+    `;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  async function handleSend(customText) {
+    const q = (customText !== undefined ? customText : inputEl.value).trim();
+    if (!q) return;
+
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+
+    appendMessage('user', escapeHtml(q));
+    chatHistory.push({ role: 'user', content: q });
+
+    const thinkingRow = appendThinking();
+    sendBtn.disabled = true;
+
+    try {
+      const res = await api('/api/chat', { question: q, history: chatHistory });
+      thinkingRow.remove();
+      sendBtn.disabled = false;
+
+      if (res.ok) {
+        if (noKeyAlert) noKeyAlert.classList.add('hidden');
+        appendMessage('bot', formatMarkdown(res.answer), res.answer);
+        chatHistory.push({ role: 'assistant', content: res.answer });
+      } else {
+        const errorHtml = `
+          <div style="color:var(--err); display:flex; align-items:flex-start; gap:8px;">
+            <svg class="icon sm" viewBox="0 0 24 24" style="flex-shrink:0; margin-top:2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div>
+              <strong>Error:</strong> ${escapeHtml(res.error || 'Failed to get answer from AI.')}
+            </div>
+          </div>
+        `;
+        appendMessage('bot', errorHtml);
+      }
+    } catch (err) {
+      thinkingRow.remove();
+      sendBtn.disabled = false;
+      const errorHtml = `
+        <div style="color:var(--err); display:flex; align-items:center; gap:8px;">
+          <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><strong>Network Error:</strong> ${escapeHtml(err.message)}</span>
+        </div>
+      `;
+      appendMessage('bot', errorHtml);
+    }
+  }
+
+  sendBtn.addEventListener('click', () => handleSend());
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  });
+
+  // Suggestion chips
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const q = chip.dataset.question;
+      if (q) {
+        inputEl.value = '';
+        inputEl.style.height = 'auto';
+        inputEl.focus();
+        handleSend(q);
+      }
+    });
+  });
+
+  // Clear conversation
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (!confirm('Clear all conversation history on this screen?')) return;
+      chatHistory.length = 0;
+      messagesEl.innerHTML = `
+        <div class="chat-row bot">
+          <div class="chat-avatar bot">AI</div>
+          <div class="chat-content">
+            <div class="chat-sender">Insight Studio AI <span class="chat-time">${getTimeStr()}</span></div>
+            <div class="chat-bubble-screen">
+              <p>Conversation cleared. You can ask a new question about <strong>{{ dataset.name }}</strong> or click any suggestion chip above.</p>
+            </div>
+          </div>
+        </div>
+      `;
+      toast('Chat history cleared', 'info');
+      inputEl.focus();
+    });
+  // Drag-and-drop file upload directly onto chat screen
+  const chatCard = document.getElementById('chat-screen-card');
+  if (chatCard) {
+    ['dragenter', 'dragover'].forEach(ev => chatCard.addEventListener(ev, e => {
+      e.preventDefault();
+      chatCard.style.outline = '2px dashed var(--accent)';
+    }));
+    ['dragleave', 'drop'].forEach(ev => chatCard.addEventListener(ev, e => {
+      e.preventDefault();
+      chatCard.style.outline = 'none';
+    }));
+    chatCard.addEventListener('drop', e => {
+      if (e.dataTransfer && e.dataTransfer.files.length) {
+        const fileInput = document.getElementById('chat-header-file-input') || document.getElementById('chat-screen-file-input');
+        if (fileInput) {
+          fileInput.files = e.dataTransfer.files;
+          fileInput.form.submit();
+        }
+      }
+    });
+  }
+
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+{% block title %}Data Quality Checker &amp; Preview{% endblock %}
+{% block content %}
+
+<!-- Page Header with Executive Title and Download Actions -->
+<div class="page-head split">
+  <div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+      <span class="badge {{ 'ok' if audit.overview.quality_score >= 80 else ('warn' if audit.overview.quality_score >= 60 else 'bad') }}" style="font-size:12px; font-weight:700; padding:4px 10px;">
+        Grade {{ audit.overview.grade }} &middot; {{ audit.overview.quality_score }}% Quality Score
+      </span>
+      <span class="muted small">Audited {{ audit.audited_at }}</span>
+    </div>
+    <h1>Data Quality <em class="editorial">Checker</em> &amp; Preview</h1>
+    <p class="muted">
+      {{ "{:,}".format(audit.overview.total_rows) }} rows &middot; {{ audit.overview.total_cols }} columns &middot; {{ "{:,}".format(audit.overview.total_cells) }} total cells in <strong>{{ nav_state.source_file }}</strong>.
+    </p>
+  </div>
+  <div class="row-actions" style="flex-wrap:wrap; justify-content:flex-end;">
+    <!-- Download Quality Report Dropdown / Buttons -->
+    <button type="button" class="btn primary" id="btn-download-pdf" title="Download Executive PDF Quality Report">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Download Report (PDF)</span>
+    </button>
+    <button type="button" class="btn ghost" id="btn-export-csv" title="Download CSV Issue Matrix">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Export CSV</span>
+    </button>
+    <a class="btn ghost" href="{{ url_for('quality_report_view') }}" target="_blank" title="Open Standalone Printable Report in New Tab">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>View Report</span>
+    </a>
+    <a class="btn primary" href="{{ url_for('clean_page') }}" style="background:var(--accent); color:#FFFFFF;">
+      <span>Clean Data Now →</span>
+    </a>
+  </div>
+</div>
+
+<!-- Executive Scorecard Banner -->
+<div class="quality-score-hero" style="background:#0B1528; border-radius:16px; padding:28px 32px; color:#FFFFFF; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; box-shadow:0 8px 30px rgba(11,21,40,0.15);">
+  <div style="display:flex; align-items:center; gap:24px;">
+    <div class="score-dial" style="width:96px; height:96px; border-radius:50%; border:5px solid {% if audit.overview.quality_score >= 80 %}#10B981{% elif audit.overview.quality_score >= 60 %}#F59E0B{% else %}#EF4444{% endif %}; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#111F38;">
+      <span style="font-size:26px; font-weight:900; line-height:1; color:#FFFFFF;">{{ audit.overview.quality_score }}%</span>
+      <span style="font-size:10px; font-weight:700; letter-spacing:0.5px; color:#23C0FF; margin-top:2px;">GRADE {{ audit.overview.grade }}</span>
+    </div>
+    <div>
+      <div style="font-size:12px; font-weight:700; letter-spacing:1px; color:#23C0FF; text-transform:uppercase;">Overall Health Assessment</div>
+      <h2 style="margin:4px 0 6px 0; font-size:24px; font-weight:800; color:#FFFFFF; letter-spacing:-0.4px;">{{ audit.overview.grade_label }}</h2>
+      <p style="margin:0; font-size:13.5px; color:#94A3B8; max-width:540px; line-height:1.45;">
+        {% if audit.overview.critical_issues > 0 %}
+          Found <strong>{{ audit.overview.critical_issues }} critical issue(s)</strong> and <strong>{{ audit.overview.warning_issues }} warning(s)</strong> that should be reviewed before high-stakes reporting.
+        {% elif audit.overview.warning_issues > 0 %}
+          Found <strong>{{ audit.overview.warning_issues }} warning item(s)</strong>. Dataset is in good shape with minor formatting or outlier adjustments recommended.
+        {% else %}
+          Dataset conforms to high data quality standards with zero critical defects detected.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:16px; flex-wrap:wrap;">
+    <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:14px 18px; min-width:110px;">
+      <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Completeness</div>
+      <div style="font-size:20px; font-weight:800; color:#FFFFFF; margin-top:2px;">{{ audit.overview.completeness_score }}%</div>
+      <div style="font-size:11px; color:#94A3B8;">{{ audit.missing_analysis.total_missing_cells }} missing</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:14px 18px; min-width:110px;">
+      <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Uniqueness</div>
+      <div style="font-size:20px; font-weight:800; color:#FFFFFF; margin-top:2px;">{{ audit.overview.uniqueness_score }}%</div>
+      <div style="font-size:11px; color:#94A3B8;">{{ audit.duplicate_analysis.exact_duplicate_rows }} duplicates</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:14px 18px; min-width:110px;">
+      <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Consistency</div>
+      <div style="font-size:20px; font-weight:800; color:#FFFFFF; margin-top:2px;">{{ audit.overview.type_consistency_score }}%</div>
+      <div style="font-size:11px; color:#94A3B8;">{{ audit.type_analysis.type_mismatches_count }} type fixes</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:14px 18px; min-width:110px;">
+      <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:700;">Validity</div>
+      <div style="font-size:20px; font-weight:800; color:#FFFFFF; margin-top:2px;">{{ audit.overview.validity_score }}%</div>
+      <div style="font-size:11px; color:#94A3B8;">{{ audit.unusual_analysis.outliers_count }} outliers</div>
+    </div>
+  </div>
+</div>
+
+<!-- 4 Core Pillars KPI Cards -->
+<section class="kpi-row" style="margin-bottom:24px;">
+  <!-- 1. Missing Values Card -->
+  <div class="kpi-card" style="border-top:3px solid {% if audit.missing_analysis.total_missing_cells > 0 %}#F59E0B{% else %}#10B981{% endif %};">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="kpi-label">Missing Values</div>
+      <span class="badge {{ 'warn' if audit.missing_analysis.total_missing_cells > 0 else 'ok' }}">
+        {{ audit.missing_analysis.missing_cells_pct }}% null
+      </span>
+    </div>
+    <div class="kpi-value" style="margin-top:6px;">{{ "{:,}".format(audit.missing_analysis.total_missing_cells) }} <span style="font-size:13px; font-weight:500; color:var(--muted);">cells</span></div>
+    <div class="kpi-sub">
+      Across {{ audit.missing_analysis.cols_with_missing }} of {{ audit.overview.total_cols }} columns &middot; {{ audit.missing_analysis.empty_rows }} blank rows
+    </div>
+  </div>
+
+  <!-- 2. Duplicates Card -->
+  <div class="kpi-card" style="border-top:3px solid {% if audit.duplicate_analysis.exact_duplicate_rows > 0 %}#EF4444{% else %}#10B981{% endif %};">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="kpi-label">Duplicates &amp; Keys</div>
+      <span class="badge {{ 'bad' if audit.duplicate_analysis.exact_duplicate_rows > 0 else 'ok' }}">
+        {{ audit.duplicate_analysis.exact_duplicate_pct }}% dup
+      </span>
+    </div>
+    <div class="kpi-value" style="margin-top:6px;">{{ "{:,}".format(audit.duplicate_analysis.exact_duplicate_rows) }} <span style="font-size:13px; font-weight:500; color:var(--muted);">rows</span></div>
+    <div class="kpi-sub">
+      {{ audit.duplicate_analysis.id_column_issues|length }} ID collision(s) detected in candidate keys
+    </div>
+  </div>
+
+  <!-- 3. Incorrect Data Types Card -->
+  <div class="kpi-card" style="border-top:3px solid {% if audit.type_analysis.type_mismatches_count > 0 %}#0066FF{% else %}#10B981{% endif %};">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="kpi-label">Type Inconsistencies</div>
+      <span class="badge {{ 'blue' if audit.type_analysis.type_mismatches_count > 0 else 'ok' }}">
+        {{ audit.type_analysis.type_mismatches_count }} mismatch
+      </span>
+    </div>
+    <div class="kpi-value" style="margin-top:6px;">{{ audit.type_analysis.type_mismatches_count }} <span style="font-size:13px; font-weight:500; color:var(--muted);">columns</span></div>
+    <div class="kpi-sub">
+      Numbers/dates stored as text or mixed string dtypes
+    </div>
+  </div>
+
+  <!-- 4. Unusual Values & Outliers Card -->
+  <div class="kpi-card" style="border-top:3px solid {% if audit.unusual_analysis.outliers_count > 0 or audit.unusual_analysis.domain_anomalies %}#8B5CF6{% else %}#10B981{% endif %};">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="kpi-label">Unusual Values &amp; Outliers</div>
+      <span class="badge {{ 'purple' if audit.unusual_analysis.outliers_count > 0 else 'ok' }}">
+        {{ audit.unusual_analysis.columns_with_outliers|length }} cols affected
+      </span>
+    </div>
+    <div class="kpi-value" style="margin-top:6px;">{{ "{:,}".format(audit.unusual_analysis.outliers_count) }} <span style="font-size:13px; font-weight:500; color:var(--muted);">anomalies</span></div>
+    <div class="kpi-sub">
+      IQR extreme deviations &amp; domain metric anomalies
+    </div>
+  </div>
+</section>
+
+<!-- Main Quality Checker & Data Preview Container with Tabbed Views -->
+<div class="card" style="margin-bottom:32px;">
+  <div class="card-head" style="border-bottom:1px solid var(--line); padding-bottom:16px;">
+    <div>
+      <h2>Data Quality Audit &amp; Interactive Preview</h2>
+      <span class="muted small">Toggle tabs to inspect detected issues, explore raw data preview, and review column health.</span>
+    </div>
+    <div class="tabs" data-tabs="quality">
+      <button class="tab active" data-tab="tab-preview">
+        <svg class="icon sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        Data Preview
+      </button>
+      <button class="tab" data-tab="tab-issues">
+        <svg class="icon sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Detected Issues ({{ audit.issues_list|length }})
+      </button>
+      <button class="tab" data-tab="tab-missing">
+        <svg class="icon sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Missing Values
+      </button>
+      <button class="tab" data-tab="tab-duplicates">
+        <svg class="icon sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Duplicates
+      </button>
+      <button class="tab" data-tab="tab-types">
+        <svg class="icon sm" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        Data Types
+      </button>
+      <button class="tab" data-tab="tab-unusual">
+        <svg class="icon sm" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Unusual Values
+      </button>
+      <button class="tab" data-tab="tab-matrix">
+        <svg class="icon sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Column Matrix ({{ audit.column_matrix|length }})
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: DATA PREVIEW (Interactive paginated/filtered preview) -->
+  <div class="tab-panel" id="tab-preview">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span class="muted small">Filter Rows:</span>
+        <button class="chip active" id="filter-all-btn" onclick="filterPreviewRows('all', this)">All Rows ({{ preview_rows|length }})</button>
+        {% if rows_with_nulls_count %}
+        <button class="chip warn" id="filter-null-btn" onclick="filterPreviewRows('has-null', this)">With Missing ({{ rows_with_nulls_count }})</button>
+        {% endif %}
+        {% if rows_with_outliers_count %}
+        <button class="chip purple" id="filter-outlier-btn" onclick="filterPreviewRows('has-outlier', this)">With Outliers ({{ rows_with_outliers_count }})</button>
+        {% endif %}
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="text" id="preview-search-input" placeholder="Search preview data…" onkeyup="searchPreviewTable(this.value)"
+               style="padding:6px 12px; font-size:12.5px; border:1px solid var(--line); border-radius:8px; width:220px; outline:none;"/>
+        <span class="muted small" id="preview-match-count">Showing {{ preview_rows|length }} rows</span>
+      </div>
+    </div>
+
+    <div class="table-wrap" style="max-height:480px; overflow:auto; border:1px solid var(--line); border-radius:10px;">
+      <table class="data compact" id="preview-table">
+        <thead style="position:sticky; top:0; z-index:2; background:#FFFFFF;">
+          <tr>
+            <th style="width:40px; text-align:center; background:#F8FAFD;">#</th>
+            {% for c in audit.column_matrix %}
+            <th>
+              <div style="display:flex; flex-direction:column; gap:2px;">
+                <span class="strong">{{ c.name }}</span>
+                <div style="display:flex; align-items:center; gap:4px;">
+                  <span class="kind kind-{{ c.kind_key }}" style="font-size:9.5px; padding:1px 5px;">{{ c.detected_type }}</span>
+                  {% if c.missing_count > 0 %}
+                    <span class="chip warn" style="font-size:9px; padding:1px 4px;">{{ c.missing_count }} null</span>
+                  {% endif %}
+                  {% if c.status == 'critical' %}
+                    <span class="chip red" style="font-size:9px; padding:1px 4px;">issue</span>
+                  {% endif %}
+                </div>
+              </div>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview_rows %}
+          <tr class="preview-row {{ 'row-null' if r._has_null else '' }} {{ 'row-outlier' if r._has_outlier else '' }}"
+              data-has-null="{{ '1' if r._has_null else '0' }}"
+              data-has-outlier="{{ '1' if r._has_outlier else '0' }}">
+            <td style="text-align:center; color:var(--muted); font-size:11px; background:#F8FAFD;">{{ loop.index }}</td>
+            {% for c in audit.column_matrix %}
+              {% set cell_val = r.cells[c.name] %}
+              <td class="{% if cell_val is none or cell_val == '' %}cell-missing{% endif %}">
+                {% if cell_val is none or cell_val == '' %}
+                  <span class="missing-badge">&lt;null&gt;</span>
+                {% else %}
+                  {{ cell_val }}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+      <span class="muted small">Interactive preview showing sample rows with cell-level quality markup.</span>
+      <div style="display:flex; gap:10px;">
+        <a class="btn ghost small" href="{{ url_for('clean_page') }}">Fix in One Click →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: DETECTED ISSUES AUDIT LIST -->
+  <div class="tab-panel hidden" id="tab-issues">
+    {% if audit.issues_list %}
+      <div class="issue-audit-grid" style="display:grid; grid-template-columns:1fr; gap:12px;">
+        {% for issue in audit.issues_list %}
+        <div class="issue-item-card" style="border:1px solid var(--line); border-left:4px solid {% if issue.severity == 'critical' %}#EF4444{% elif issue.severity == 'warning' %}#F59E0B{% else %}#0066FF{% endif %}; border-radius:10px; padding:16px 20px; background:#FFFFFF;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                <span class="badge {{ 'bad' if issue.severity == 'critical' else ('warn' if issue.severity == 'warning' else 'blue') }}">
+                  {{ issue.severity.upper() }}
+                </span>
+                <span class="chip gray" style="font-size:11px; font-weight:700;">{{ issue.category.title() }}</span>
+                <span class="strong" style="font-size:14.5px;">{{ issue.title }}</span>
+              </div>
+              <p style="margin:4px 0 8px 0; color:var(--text); font-size:13.5px; line-height:1.45;">
+                {{ issue.detail }}
+              </p>
+              {% if issue.sample_values %}
+              <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">
+                <strong>Sample affected values:</strong>
+                <span style="font-family:monospace; background:var(--bg-card); padding:2px 6px; border-radius:4px;">
+                  {{ issue.sample_values|join(', ') }}
+                </span>
+              </div>
+              {% endif %}
+            </div>
+            <div style="text-align:right;">
+              <span class="chip" style="font-size:11px; background:#F1F5F9; color:#0F172A;">Column: <strong>{{ issue.column }}</strong></span>
+            </div>
+          </div>
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid #F1F5F9; display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
+            <div style="color:var(--accent); display:flex; align-items:center; gap:5px;">
+              <svg class="icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              <span><strong>Remediation:</strong> {{ issue.remediation }}</span>
+            </div>
+            <a class="btn ghost small" href="{{ url_for('clean_page') }}">Apply Fix →</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="text-align:center; padding:40px 20px;">
+        <svg class="icon xl" style="color:var(--ok); margin-bottom:10px;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <h3>Zero Data Quality Issues Detected!</h3>
+        <p class="muted">All rows, columns, data types, and values are clean, consistent, and within valid statistical boundaries.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TAB 3: MISSING VALUES ANALYSIS -->
+  <div class="tab-panel hidden" id="tab-missing">
+    <div class="split" style="margin-bottom:16px;">
+      <div>
+        <h3>Missing Values Analysis</h3>
+        <p class="muted small">Breakdown of null values, blanks, and placeholder tokens by column.</p>
+      </div>
+      <div>
+        <span class="badge {{ 'ok' if audit.missing_analysis.total_missing_cells == 0 else 'warn' }}">
+          {{ audit.missing_analysis.total_missing_cells }} Total Missing Cells ({{ audit.missing_analysis.missing_cells_pct }}%)
+        </span>
+      </div>
+    </div>
+
+    {% if audit.missing_analysis.cols_with_missing > 0 %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Column Name</th>
+              <th class="num">Missing Cells</th>
+              <th class="num">Missing %</th>
+              <th>Completeness Visual</th>
+              <th>Token Nulls (N/A, -, etc.)</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cm in audit.missing_analysis.column_missing %}
+            {% if cm.total_missing > 0 %}
+            <tr>
+              <td class="strong">{{ cm.column }}</td>
+              <td class="num font-mono">{{ cm.total_missing }}</td>
+              <td class="num font-mono {{ 'warn' if cm.pct > 5 else '' }}">{{ cm.pct }}%</td>
+              <td style="min-width:180px;">
+                <div style="background:#E2E8F0; border-radius:999px; height:8px; overflow:hidden; width:100%;">
+                  <div style="background:{% if cm.pct > 40 %}#EF4444{% elif cm.pct > 10 %}#F59E0B{% else %}#10B981{% endif %}; height:100%; width:{{ 100 - cm.pct }}%;"></div>
+                </div>
+              </td>
+              <td class="muted small">
+                {% if cm.token_nulls > 0 %}
+                  <span class="chip warn">{{ cm.token_nulls }} string token(s)</span>
+                {% else %}
+                  <span>Standard NaN</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ 'bad' if cm.severity == 'critical' else ('warn' if cm.severity == 'warning' else 'blue') }}">
+                  {{ cm.severity.title() }}
+                </span>
+              </td>
+              <td>
+                <a class="btn ghost small" href="{{ url_for('clean_page') }}">Impute / Clean</a>
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding:30px; text-align:center; color:var(--ok);">
+        <strong>100% Complete!</strong> Zero missing or null values found in any column.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TAB 4: DUPLICATES ANALYSIS -->
+  <div class="tab-panel hidden" id="tab-duplicates">
+    <div class="split" style="margin-bottom:16px;">
+      <div>
+        <h3>Duplicate Records &amp; Key Collisions</h3>
+        <p class="muted small">Detection of exact duplicate rows and duplicate identifier values.</p>
+      </div>
+      <div>
+        <span class="badge {{ 'ok' if audit.duplicate_analysis.exact_duplicate_rows == 0 else 'bad' }}">
+          {{ audit.duplicate_analysis.exact_duplicate_rows }} Exact Duplicate Row(s)
+        </span>
+      </div>
+    </div>
+
+    {% if audit.duplicate_analysis.exact_duplicate_rows > 0 %}
+      <div class="flash warning" style="margin-bottom:16px;">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>
+          Found <strong>{{ audit.duplicate_analysis.exact_duplicate_rows }} exact duplicate rows</strong> ({{ audit.duplicate_analysis.exact_duplicate_pct }}% of all data). Removing duplicates eliminates inflated revenue and double-counted metrics.
+        </span>
+      </div>
+      <div style="margin-bottom:16px;">
+        <strong>Sample duplicate row indices:</strong>
+        <span class="muted small font-mono">
+          {{ audit.duplicate_analysis.duplicate_indices|join(', ') }}
+        </span>
+      </div>
+    {% endif %}
+
+    {% if audit.duplicate_analysis.id_column_issues %}
+      <h4 style="margin:20px 0 10px 0;">Identifier / Candidate Key Collisions</h4>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>ID Column</th>
+              <th class="num">Duplicate Keys</th>
+              <th class="num">Total Records</th>
+              <th>Collisions Breakdown</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for id_c in audit.duplicate_analysis.id_column_issues %}
+            <tr>
+              <td class="strong">{{ id_c.column }}</td>
+              <td class="num font-mono warn">{{ id_c.duplicate_keys }}</td>
+              <td class="num font-mono">{{ id_c.total_keys }}</td>
+              <td class="muted small">{{ id_c.example_collisions|join(', ') }}</td>
+              <td><a class="btn ghost small" href="{{ url_for('clean_page') }}">Deduplicate Key</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if audit.duplicate_analysis.exact_duplicate_rows == 0 and not audit.duplicate_analysis.id_column_issues %}
+      <div style="padding:30px; text-align:center; color:var(--ok);">
+        <strong>No duplicates found!</strong> Every row in this dataset represents a distinct record.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TAB 5: DATA TYPES ANALYSIS -->
+  <div class="tab-panel hidden" id="tab-types">
+    <div class="split" style="margin-bottom:16px;">
+      <div>
+        <h3>Data Type Mismatches</h3>
+        <p class="muted small">Identifies numbers and dates stored as string/object text, enabling analytical conversions.</p>
+      </div>
+      <div>
+        <span class="badge {{ 'ok' if audit.type_analysis.type_mismatches_count == 0 else 'blue' }}">
+          {{ audit.type_analysis.type_mismatches_count }} Type Correction(s) Needed
+        </span>
+      </div>
+    </div>
+
+    {% if audit.type_analysis.columns_with_mismatch %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Column Name</th>
+              <th>Current Storage Dtype</th>
+              <th>Detected True Type</th>
+              <th>Parseable Rate</th>
+              <th>Sample Values</th>
+              <th>Recommended Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tm in audit.type_analysis.columns_with_mismatch %}
+            <tr>
+              <td class="strong">{{ tm.column }}</td>
+              <td><span class="chip gray font-mono">{{ tm.current_dtype }}</span></td>
+              <td><span class="chip purple"><strong>{{ tm.detected_true_type }}</strong></span></td>
+              <td class="font-mono">{{ tm.parseable_rate }}%</td>
+              <td class="muted small font-mono">{{ tm.sample_raw_values|join(', ') }}</td>
+              <td>
+                <a class="btn ghost small" href="{{ url_for('clean_page') }}">Convert Type →</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding:30px; text-align:center; color:var(--ok);">
+        <strong>Types Are Consistent!</strong> All columns are stored in their native numeric, datetime, or categorical types.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TAB 6: UNUSUAL VALUES & OUTLIERS -->
+  <div class="tab-panel hidden" id="tab-unusual">
+    <div class="split" style="margin-bottom:16px;">
+      <div>
+        <h3>Unusual Values &amp; Outliers Detection</h3>
+        <p class="muted small">Statistical outlier boundaries (IQR) and domain rule verification (e.g. negative prices or future dates).</p>
+      </div>
+      <div>
+        <span class="badge {{ 'ok' if audit.unusual_analysis.outliers_count == 0 else 'purple' }}">
+          {{ audit.unusual_analysis.outliers_count }} Outlier Values Found
+        </span>
+      </div>
+    </div>
+
+    {% if audit.unusual_analysis.columns_with_outliers %}
+      <h4 style="margin:16px 0 8px 0;">Statistical Outliers (Interquartile Range)</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th class="num">Outlier Count</th>
+              <th class="num">Outlier %</th>
+              <th>Valid Boundary [Lower → Upper]</th>
+              <th>Observed Range [Min → Max]</th>
+              <th>Sample Outliers</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in audit.unusual_analysis.columns_with_outliers %}
+            <tr>
+              <td class="strong">{{ o.column }}</td>
+              <td class="num font-mono warn">{{ o.outliers_count }}</td>
+              <td class="num font-mono">{{ o.outliers_pct }}%</td>
+              <td class="font-mono text-small">[{{ o.lower_bound }} &rarr; {{ o.upper_bound }}]</td>
+              <td class="font-mono text-small">[{{ o.min_value }} &rarr; {{ o.max_value }}]</td>
+              <td class="muted small font-mono">{{ o.example_outliers|join(', ') }}</td>
+              <td><a class="btn ghost small" href="{{ url_for('clean_page') }}">Cap Outliers</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if audit.unusual_analysis.domain_anomalies %}
+      <h4 style="margin:20px 0 8px 0;">Domain Metric Anomalies</h4>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Anomaly Type</th>
+              <th>Details</th>
+              <th>Count</th>
+              <th>Sample Values</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for da in audit.unusual_analysis.domain_anomalies %}
+            <tr>
+              <td class="strong">{{ da.column }}</td>
+              <td><span class="chip red">{{ da.type.replace('_', ' ').title() }}</span></td>
+              <td>{{ da.description }}</td>
+              <td class="font-mono warn">{{ da.count }}</td>
+              <td class="font-mono muted small">{{ da.sample_values|join(', ') }}</td>
+              <td><a class="btn ghost small" href="{{ url_for('clean_page') }}">Filter Anomaly</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if audit.unusual_analysis.outliers_count == 0 and not audit.unusual_analysis.domain_anomalies %}
+      <div style="padding:30px; text-align:center; color:var(--ok);">
+        <strong>No unusual values or extreme statistical outliers detected!</strong>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TAB 7: COLUMN MATRIX -->
+  <div class="tab-panel hidden" id="tab-matrix">
+    <div class="split" style="margin-bottom:16px;">
+      <div>
+        <h3>Column Quality Matrix</h3>
+        <p class="muted small">Comprehensive field-by-field audit scorecard for every column in the dataset.</p>
+      </div>
+      <div>
+        <a class="btn ghost small" href="{{ url_for('quality_download', fmt='csv') }}">
+          <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Export Matrix CSV</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Column Name</th>
+            <th>Detected Type</th>
+            <th>Dtype</th>
+            <th class="num">Health Score</th>
+            <th class="num">Missing</th>
+            <th class="num">Unique</th>
+            <th>Status</th>
+            <th>Recommended Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in audit.column_matrix %}
+          <tr>
+            <td class="strong">{{ c.name }}</td>
+            <td><span class="kind kind-{{ c.kind_key }}">{{ c.detected_type }}</span></td>
+            <td class="muted font-mono small">{{ c.raw_dtype }}</td>
+            <td class="num font-mono">
+              <span style="font-weight:700; color:{% if c.health_score >= 85 %}#10B981{% elif c.health_score >= 65 %}#F59E0B{% else %}#EF4444{% endif %};">
+                {{ c.health_score }}%
+              </span>
+            </td>
+            <td class="num font-mono {{ 'warn' if c.missing_count > 0 else '' }}">
+              {{ c.missing_count }} <span class="muted text-small">({{ c.missing_pct }}%)</span>
+            </td>
+            <td class="num font-mono">{{ "{:,}".format(c.unique_count) }}</td>
+            <td>
+              <span class="badge {{ 'ok' if c.status == 'clean' else ('warn' if c.status == 'warning' else 'bad') }}">
+                {{ c.status.upper() }}
+              </span>
+            </td>
+            <td class="muted small">{{ c.recommended_action }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Interactive Client-side Script for Preview Table Search and Filters -->
+<script>
+  function searchPreviewTable(query) {
+    const q = (query || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('#preview-table tbody tr');
+    let visible = 0;
+    rows.forEach(r => {
+      const txt = r.textContent.toLowerCase();
+      if (!q || txt.includes(q)) {
+        r.style.display = '';
+        visible++;
+      } else {
+        r.style.display = 'none';
+      }
+    });
+    const counter = document.getElementById('preview-match-count');
+    if (counter) counter.textContent = `Showing ${visible} of ${rows.length} rows`;
+  }
+
+  function filterPreviewRows(mode, btn) {
+    document.querySelectorAll('#tab-preview .chip').forEach(c => c.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const rows = document.querySelectorAll('#preview-table tbody tr');
+    let visible = 0;
+    rows.forEach(r => {
+      let show = true;
+      if (mode === 'has-null') {
+        show = r.getAttribute('data-has-null') === '1';
+      } else if (mode === 'has-outlier') {
+        show = r.getAttribute('data-has-outlier') === '1';
+      }
+      r.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const counter = document.getElementById('preview-match-count');
+    if (counter) counter.textContent = `Showing ${visible} of ${rows.length} rows`;
+  }
+</script>
+
+<style>
+  .cell-missing { background: rgba(245, 158, 11, 0.08) !important; }
+  .missing-badge { color: #D97706; font-size: 11px; font-weight: 700; font-family: monospace; }
+  .row-null td { border-bottom-color: rgba(245, 158, 11, 0.2); }
+  .row-outlier td { border-bottom-color: rgba(139, 92, 246, 0.2); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  initTabs('quality');
+
+  document.getElementById('btn-download-pdf')?.addEventListener('click', () => {
+    downloadWithProgress('{{ url_for("quality_download", fmt="pdf") }}', 'data_quality_report.pdf', {
+      title: 'Data Quality Executive Report (PDF)',
+      sub: 'Auditing dataset & rendering publication report',
+      steps: [
+        'Auditing dataset health & anomaly metrics...',
+        'Compiling executive scorecard & matrices...',
+        'Rendering vector PDF publication pages...',
+        'Finalizing download...'
+      ]
+    });
+  });
+
+  document.getElementById('btn-export-csv')?.addEventListener('click', () => {
+    downloadWithProgress('{{ url_for("quality_download", fmt="csv") }}', 'data_quality_report.csv', {
+      title: 'Quality Issues Matrix (CSV)',
+      sub: 'Exporting tabular issue log',
+      steps: [
+        'Extracting column health details...',
+        'Formatting CSV matrix rows...',
+        'Finalizing download...'
+      ]
+    });
+  });
+</script>
+{% endblock %}
+

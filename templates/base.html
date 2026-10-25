@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{% block title %}{{ nav_state.source_file or "New analysis" }}{% endblock %} &middot; {{ app_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Playfair+Display:ital,wght@1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230066FF'/><path d='M25 65 L42 45 L56 58 L75 32' stroke='white' stroke-width='9' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"/>
+</head>
+<body>
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">iS</div>
+      <div>
+        <div class="brand-name">insight<span class="brand-dot">.</span>studio</div>
+        <div class="brand-sub">clarity &middot; perspective &middot; AI</div>
+      </div>
+    </div>
+
+    <nav class="steps">
+      <a class="step {{ 'active' if request.endpoint == 'index' }} {{ 'done' if nav_step1_done }}" href="{{ url_for('index') }}">
+        <span class="step-no">
+          <span class="step-num">1</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Upload</b><small>Excel, CSV, PDF or folder</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint in ('profile_page','sheet_page') }} {{ 'done' if nav_step2_done }} {{ 'disabled' if not nav_has_data }}"
+         href="{{ url_for('profile_page') if nav_has_data else '#' }}">
+        <span class="step-no">
+          <span class="step-num">2</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Understand</b><small>Overview, types &amp; stats</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint == 'quality_page' }} {{ 'done' if nav_step3_done }} {{ 'disabled' if not nav_has_data }}"
+         href="{{ url_for('quality_page') if nav_has_data else '#' }}">
+        <span class="step-no">
+          <span class="step-num">3</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Quality Checker</b><small>Preview, audit &amp; report</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint == 'clean_page' }} {{ 'done' if nav_step4_done }} {{ 'disabled' if not nav_has_data }}"
+         href="{{ url_for('clean_page') if nav_has_data else '#' }}">
+        <span class="step-no">
+          <span class="step-num">4</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Clean</b><small>Fix data automatically</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint == 'insights_page' }} {{ 'done' if nav_step5_done }} {{ 'disabled' if not nav_has_data }}"
+         href="{{ url_for('insights_page') if nav_has_data else '#' }}">
+        <span class="step-no">
+          <span class="step-num">5</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Insights &amp; charts</b><small>Options, KPIs, graphs</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint == 'dashboard_page' }} {{ 'done' if nav_step6_done }} {{ 'disabled' if not nav_has_data }}"
+         href="{{ url_for('dashboard_page') if nav_has_data else '#' }}">
+        <span class="step-no">
+          <span class="step-num">6</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>Dashboard</b><small>Combine &amp; export PDF</small></span>
+      </a>
+      <a class="step {{ 'active' if request.endpoint == 'chat_page' }}"
+         href="{{ url_for('chat_page') }}">
+        <span class="step-no">
+          <span class="step-num">7</span>
+          <svg class="step-check icon sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span class="step-txt"><b>AI Assistant</b><small>Dedicated chat screen</small></span>
+      </a>
+    </nav>
+
+    {% if nav_has_data %}
+    <div class="side-card">
+      <div class="side-label">Current dataset</div>
+      <div class="side-value">{{ nav_state.source_file }}</div>
+      {% if nav_state.sheet %}<div class="side-sub">Sheet: {{ nav_state.sheet }}</div>{% endif %}
+      <div class="side-badges">
+        {% if nav_cleaned %}<span class="badge ok">cleaned</span>{% else %}<span class="badge">raw</span>{% endif %}
+        <span class="badge">{{ nav_charts }} chart{{ '' if nav_charts == 1 else 's' }}</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
+        <a class="btn ghost small w-full" href="{{ url_for('reset') }}" style="justify-content:center;"
+           onclick="return confirm('Clear current dataset to upload different data?');">
+          + Upload Different Data
+        </a>
+        <a class="btn danger-btn small w-full" href="{{ url_for('reset') }}" style="justify-content:center;"
+           onclick="return confirm('Clear current dataset and start new insights?');">
+          <svg class="icon sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Clear Data &amp; Start New</span>
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+
+    <div class="side-foot">
+      Insight Studio &middot; Intelligent Analytics
+    </div>
+  </aside>
+
+  <main class="content">
+    {% if nav_has_data %}
+    <div class="top-dataset-bar">
+      <div class="tdb-info">
+        <span class="muted small">Active Dataset:</span>
+        <strong title="{{ nav_state.source_file }}">{{ nav_state.source_file }}</strong>
+        {% if nav_cleaned %}<span class="badge ok">Cleaned</span>{% else %}<span class="badge">Raw</span>{% endif %}
+        {% if nav_state.sheet %}<span class="muted small" style="margin-left:4px;">(Sheet: {{ nav_state.sheet }})</span>{% endif %}
+      </div>
+      <div class="tdb-actions">
+        <a class="btn ghost small" href="{{ url_for('reset') }}"
+           onclick="return confirm('Clear current dataset to upload different data?');">
+          + Upload Different Data
+        </a>
+        <a class="btn danger-btn small" href="{{ url_for('reset') }}"
+           onclick="return confirm('Clear current dataset and start new insights?');">
+          <svg class="icon sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Clear Data &amp; Start New</span>
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if nav_has_data and nav_cleaned and request.endpoint in ('profile_page','insights_page','dashboard_page') %}
+    <div class="banner">
+      <span>Analysis is using the <b>{{ 'cleaned' if nav_state.use_cleaned else 'original' }}</b> data.</span>
+      <form method="post" action="{{ url_for('toggle_use_cleaned') }}">
+        <input type="hidden" name="use" value="{{ '0' if nav_state.use_cleaned else '1' }}"/>
+        <input type="hidden" name="next" value="{{ request.path }}"/>
+        <button class="btn ghost small" type="submit">
+          Switch to {{ 'original' if nav_state.use_cleaned else 'cleaned' }} data
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+
+
+<!-- AI Chat Panel (floating widget on other pages) -->
+{% if nav_has_data and request.endpoint != 'chat_page' %}
+<div id="chat-toggle" class="chat-toggle" title="Ask AI about your data">
+  <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+  <span>AI Chat</span>
+</div>
+<div id="chat-panel" class="chat-panel hidden">
+  <div class="chat-header">
+    <span class="chat-title"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Ask AI about your data</span>
+    <div style="display:flex; align-items:center; gap:6px;">
+      <a href="{{ url_for('chat_page') }}" class="chat-fullscreen-btn" title="Open dedicated full screen">
+        <svg class="icon sm" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </a>
+      <button class="chat-close" id="chat-close">&times;</button>
+    </div>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg bot">
+      <div class="chat-bubble">
+        Hi! I'm your <strong>AI data assistant</strong>. Ask me anything about your uploaded dataset —
+        trends, outliers, column meanings, chart recommendations, or any questions about the data.
+      </div>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="e.g. What are the top 5 products by revenue?" autocomplete="off"/>
+    <button class="btn primary small" id="chat-send" type="button">Send</button>
+  </div>
+</div>
+{% endif %}
+
+<!-- Universal Staged Export Progress Modal -->
+<div id="export-progress-modal" class="progress-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+  <div class="progress-modal-card">
+    <div class="progress-modal-header">
+      <div class="progress-modal-icon-wrap">
+        <svg class="progress-modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </div>
+      <div class="progress-modal-headings">
+        <h3 id="export-modal-title">Exporting Document</h3>
+        <p class="progress-modal-sub" id="export-modal-sub">Preparing publication-ready file</p>
+      </div>
+      <button type="button" class="progress-modal-close" id="export-modal-close" aria-label="Close export dialog">&times;</button>
+    </div>
+
+    <div class="progress-modal-body">
+      <div class="progress-meta-row">
+        <span class="progress-stage-label" id="export-stage-label">Auditing dataset metrics...</span>
+        <span class="progress-pct-badge" id="export-pct-badge">0%</span>
+      </div>
+
+      <div class="progress-track-wrapper">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="export-bar-fill" style="width: 0%;">
+            <div class="progress-bar-shimmer"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="progress-steps-list" id="export-steps-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+<div id="busy" class="busy hidden"><div class="spinner"></div><span id="busy-text">Working…</span></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Understand{% endblock %}
+{% block content %}
+
+<div class="page-head split">
+  <div>
+    <h1>Understand your <em class="editorial">dataset</em>: {{ nav_state.source_file }}</h1>
+    <p class="muted">
+      {{ "{:,}".format(profile.overview.rows) }} rows &middot; {{ profile.overview.cols }} columns &middot;
+      {{ profile.overview.memory_kb }} KB in memory
+      {% if info.sheet %} &middot; sheet “{{ info.sheet }}”{% endif %}
+      {% if using_cleaned %}<span class="badge ok">cleaned data</span>{% endif %}
+    </p>
+  </div>
+  <div class="row-actions">
+    <a class="btn primary" href="{{ url_for('quality_page') }}">Next: Quality Checker &amp; Preview →</a>
+    <a class="btn ghost" href="{{ url_for('quality_download', fmt='pdf') }}" title="Download Data Quality Report PDF">
+      <svg class="icon sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Quality Report (PDF)</span>
+    </a>
+    <a class="btn ghost" href="{{ url_for('clean_page') }}">Skip to clean →</a>
+  </div>
+</div>
+
+<!-- Quality Score Quick Hero Card -->
+{% if quality_summary %}
+<div class="card" style="background:#0B1528; color:#FFFFFF; margin-bottom:20px; border-radius:14px; padding:20px 24px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+    <div style="display:flex; align-items:center; gap:18px;">
+      <div style="width:58px; height:58px; border-radius:50%; border:3px solid {% if quality_summary.quality_score >= 80 %}#10B981{% elif quality_summary.quality_score >= 60 %}#F59E0B{% else %}#EF4444{% endif %}; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#111F38;">
+        <span style="font-size:18px; font-weight:900; line-height:1; color:#FFFFFF;">{{ quality_summary.quality_score }}%</span>
+        <span style="font-size:8px; font-weight:700; color:#23C0FF;">GR. {{ quality_summary.grade }}</span>
+      </div>
+      <div>
+        <div style="font-size:11px; font-weight:700; letter-spacing:0.8px; color:#23C0FF; text-transform:uppercase;">Data Quality Assessment</div>
+        <h3 style="margin:2px 0 4px 0; font-size:17px; font-weight:800; color:#FFFFFF;">{{ quality_summary.grade_label }} &middot; {{ quality_summary.total_issues }} Issues Detected</h3>
+        <div style="font-size:12.5px; color:#94A3B8;">
+          {{ quality_summary.missing_cells }} missing cell(s) &middot; {{ quality_summary.duplicate_rows }} duplicate row(s) &middot; {{ quality_summary.type_mismatches }} type issue(s) &middot; {{ quality_summary.outliers_count }} outlier(s)
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <a class="btn ghost small" href="{{ url_for('quality_report_view') }}" target="_blank" style="color:#FFFFFF; border-color:rgba(255,255,255,0.2);">
+        <svg class="icon sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>View Report</span>
+      </a>
+      <a class="btn primary small" href="{{ url_for('quality_page') }}" style="background:#0066FF;">
+        <span>Open Quality Checker &amp; Preview →</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<section class="kpi-row">
+  {% for k in kpis %}
+  <div class="kpi-card">
+    <div class="kpi-label">{{ k.label }}</div>
+    <div class="kpi-value">{{ k.value }}</div>
+    <div class="kpi-sub">{{ k.sub }}</div>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>Data-quality notes</h2>
+  <div class="notes">
+    {% for n in profile.quality_notes %}
+      <div class="note-item {{ n.level }}">
+        <span class="dot"></span>
+        <div><b>{{ n.title }}</b><span>{{ n.text }}</span></div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Columns ({{ profile.columns|length }})</h2>
+    <div class="tabs" data-tabs="profile">
+      <button class="tab active" data-tab="tab-columns">Column list</button>
+      <button class="tab" data-tab="tab-stats">describe()</button>
+      <button class="tab" data-tab="tab-corr">Correlation</button>
+      <button class="tab" data-tab="tab-preview">Preview</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-columns">
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>Column</th><th>Detected type</th><th>Raw dtype</th><th class="num">Non-null</th>
+              <th class="num">Missing</th><th class="num">Unique</th><th>Quick stats</th><th>Top values</th></tr>
+        </thead>
+        <tbody>
+        {% for c in profile.columns %}
+          <tr>
+            <td class="strong">{{ c.name }}
+              {% if c.flags.money %}<span class="chip purple">money</span>{% endif %}
+              {% if c.flags.quantity %}<span class="chip blue">quantity</span>{% endif %}
+              {% if c.flags.rating %}<span class="chip amber">rating</span>{% endif %}
+              {% if c.flags.percent %}<span class="chip gray">percent</span>{% endif %}
+            </td>
+            <td><span class="kind kind-{{ c.kind }}">{{ c.kind_label }}</span></td>
+            <td class="muted">{{ c.dtype }}</td>
+            <td class="num">{{ "{:,}".format(c.non_null) }}</td>
+            <td class="num {{ 'warn' if c.null_count }}">{{ c.null_pct }}% <span class="muted">({{ c.null_count }})</span></td>
+            <td class="num">{{ "{:,}".format(c.unique) }}</td>
+            <td class="muted small">
+              {% if c.stats and c.stats.get('mean') is not none and c.kind == 'numeric' %}
+                min {{ "{:,.2f}".format(c.stats['min']) }} · mean {{ "{:,.2f}".format(c.stats['mean']) }} · max {{ "{:,.2f}".format(c.stats['max']) }}
+              {% elif c.kind == 'datetime' and c.stats.min %}
+                {{ c.stats.min }} → {{ c.stats.max }}
+              {% else %}
+                {{ c.samples[:2]|join(', ') if c.samples else '-' }}
+              {% endif %}
+            </td>
+            <td class="muted small">
+              {% set tv = c.top_values[:3] %}
+              {% if tv %}{% for t in tv %}{{ t.value }} <span class="muted">({{ t.pct }}%)</span>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}-{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-panel hidden" id="tab-stats">
+    {% if profile.describe.rows %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Statistic</th>{% for c in profile.describe.columns %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in profile.describe.rows %}
+          <tr><td class="strong">{{ row.stat }}</td>{% for v in row.cells %}<td class="num">{{ v }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Same numbers as <code>df.describe()</code> in your notebook.</p>
+    {% else %}
+    <p class="muted">No numeric or date columns to summarise.</p>
+    {% endif %}
+  </div>
+
+  <div class="tab-panel hidden" id="tab-corr">
+    {% if profile.correlation %}
+    <div class="table-wrap">
+      <table class="data heat">
+        <thead><tr><th></th>{% for c in profile.correlation.columns %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in profile.correlation.rows %}
+          <tr>
+            <td class="strong">{{ row.name }}</td>
+            {% for v in row.cells %}
+              {% if v is none %}<td class="num muted">-</td>
+              {% else %}<td class="num" style="background: rgba(79,70,229,{{ (v|abs * 0.45)|round(2) }});">{{ v }}</td>{% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Values near ±1 mean strong relationships; near 0 means unrelated.</p>
+    {% else %}
+    <p class="muted">Correlation needs at least two numeric columns.</p>
+    {% endif %}
+  </div>
+
+  <div class="tab-panel hidden" id="tab-preview">
+    <h3 class="sub">First 10 rows <span class="muted small">(df.head(10))</span></h3>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr>{% for c in profile.preview_head.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in profile.preview_head.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Last 5 rows <span class="muted small">(df.tail())</span></h3>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr>{% for c in profile.preview_tail.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in profile.preview_tail.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  initTabs('profile');
+</script>
+{% endblock %}
